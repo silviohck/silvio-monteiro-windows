@@ -55,6 +55,9 @@ public sealed class Storage
 
     public void ImportMacData(string source)
     {
+        // A ausência da origem não é equivalente a um cadastro vazio. Nunca apagar o Windows.
+        if (!File.Exists(source))
+            throw new FileNotFoundException("O arquivo de dados do Mac não foi encontrado. Nenhum cadastro foi alterado.", source);
         // A importação preserva integralmente a fonte e o estado anterior do Windows.
         var incoming = Load(source);
         MarkInterruptedPrints(incoming);
