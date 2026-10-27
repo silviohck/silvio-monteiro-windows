@@ -1,4 +1,6 @@
 using Microsoft.Win32;
+using Color = System.Windows.Media.Color;
+using Brushes = System.Windows.Media.Brushes;
 using Orthck.Core;
 using System.Diagnostics;
 using System.IO;
