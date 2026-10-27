@@ -9,8 +9,12 @@
     <AssemblyName>Orthck.Windows</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
-    <!-- Não importar System.Windows.Forms globalmente: Button e Application pertencem ao WPF. -->
+    <!-- WinForms só é usado para o seletor de pastas (alias Forms). Sem isto, os usings implícitos
+         do WinForms tornam ambíguos Application, Button, TextBox, MessageBox etc. do WPF. -->
     <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\Orthck.Core\Orthck.Core.csproj" />
   </ItemGroup>
 </Project>

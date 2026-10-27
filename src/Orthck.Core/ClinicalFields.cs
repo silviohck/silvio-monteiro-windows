@@ -72,7 +72,7 @@ public static class ClinicalFields
     }
     private static string Age(string? birthday, DateTimeOffset when)
     {
-        if (!DateTime.TryParseExact(birthday, "dd/MM/yyyy", PtBr, DateTimeStyles.None, out var born)) return "";
+        if (!DateTime.TryParseExact(birthday?.Trim(), "dd/MM/yyyy", PtBr, DateTimeStyles.None, out var born)) return "";
         var years = when.Year - born.Year - (new DateTime(when.Year, born.Month, born.Day > DateTime.DaysInMonth(when.Year, born.Month) ? DateTime.DaysInMonth(when.Year, born.Month) : born.Day) > when.Date ? 1 : 0);
         return years >= 0 ? years.ToString(PtBr) : "";
     }

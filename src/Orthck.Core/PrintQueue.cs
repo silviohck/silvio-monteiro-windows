@@ -20,7 +20,8 @@ public sealed class PrintQueue
 
     public PrintItem Add(GeneratedDocument document, int copies)
     {
-        var existing = _store.Data.FilaImpressao.FirstOrDefault(x => x.DocumentoID == document.Id);
+        // Um documento já enviado pode voltar à fila (reimpressão pedida pelo usuário, com confirmação na tela).
+        var existing = _store.Data.FilaImpressao.FirstOrDefault(x => x.DocumentoID == document.Id && x.Situacao != "enviado");
         if (existing != null) return existing;
         var item = PrintItem.From(document, copies);
         _store.Data.FilaImpressao.Add(item);
@@ -58,9 +59,10 @@ public sealed class PrintQueue
         Persist();
     }
 
-    public async Task SubmitAsync(IEnumerable<Guid> ids, string? printerName, CancellationToken ct = default)
+    /// <returns>false quando outra rodada de impressão já está em andamento (nada foi enviado).</returns>
+    public async Task<bool> SubmitAsync(IEnumerable<Guid> ids, string? printerName, CancellationToken ct = default)
     {
-        if (!await _singleJob.WaitAsync(0, ct)) return;
+        if (!await _singleJob.WaitAsync(0, ct)) return false;
         IsProcessing = true;
         Changed?.Invoke();
         try
@@ -92,7 +94,11 @@ public sealed class PrintQueue
                 };
                 item.Observacao = result.Detail;
                 Persist();
+                // Resultado incerto pode indicar Word bloqueado ainda imprimindo.
+                // Nunca continuar o lote sem confirmação do usuário.
+                if (result.Outcome == PrintOutcome.Uncertain) break;
             }
+            return true;
         }
         finally
         {

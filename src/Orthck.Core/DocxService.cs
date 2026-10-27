@@ -21,7 +21,7 @@ public static partial class DocxService
     {
         var found = new List<string>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        using var zip = ZipFile.OpenRead(templatePath);
+        using var zip = OpenShared(templatePath);
         EnsureDocx(zip);
         foreach (var entry in zip.Entries.Where(e => IsEditableXml(e.FullName)))
         {
@@ -43,7 +43,7 @@ public static partial class DocxService
         var temp = Path.Combine(dir, $".{Guid.NewGuid():N}.docx.tmp");
         try
         {
-            using (var source = ZipFile.OpenRead(templatePath))
+            using (var source = OpenShared(templatePath))
             using (var destination = ZipFile.Open(temp, ZipArchiveMode.Create))
             {
                 EnsureDocx(source);
@@ -87,6 +87,7 @@ public static partial class DocxService
         foreach (var match in matches)
         {
             if (!values.TryGetValue(match.Groups[1].Value, out var replacement)) continue;
+            replacement = Sanitize(replacement);
             var begin = match.Index;
             var end = begin + match.Length;
             var first = true;
@@ -104,21 +105,46 @@ public static partial class DocxService
         for (var i = 0; i < nodes.Length; i++)
         {
             if (original[i] == modified[i]) continue;
-            // A quebra de linha em um campo vira w:br, não um texto invisível ao Word.
-            var lines = modified[i].Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
-            nodes[i].Value = lines[0];
+            // Quebra de linha e tabulação viram w:br e w:tab; dentro de w:t o Word não as exibe.
+            var parts = BreakOrTab().Split(modified[i]);
+            nodes[i].Value = parts[0];
             nodes[i].SetAttributeValue(XmlNs + "space", "preserve");
             XNode after = nodes[i];
-            for (var j = 1; j < lines.Length; j++)
+            for (var j = 1; j + 1 < parts.Length; j += 2)
             {
-                var lineBreak = new XElement(W + "br");
-                after.AddAfterSelf(lineBreak);
-                var nextText = new XElement(W + "t", new XAttribute(XmlNs + "space", "preserve"), lines[j]);
-                lineBreak.AddAfterSelf(nextText);
+                var separator = new XElement(W + (parts[j] == "\t" ? "tab" : "br"));
+                after.AddAfterSelf(separator);
+                var nextText = new XElement(W + "t", new XAttribute(XmlNs + "space", "preserve"), parts[j + 1]);
+                separator.AddAfterSelf(nextText);
                 after = nextText;
             }
         }
     }
+
+    [GeneratedRegex(@"(\r\n|\r|\n|\t)")]
+    private static partial Regex BreakOrTab();
+
+    /// <summary>
+    /// Texto colado do Word/Excel pode trazer caracteres proibidos em XML (ex.: 0x0B, a quebra manual do Word),
+    /// que impediam gerar o documento. Quebras viram nova linha; os demais são removidos.
+    /// </summary>
+    private static string Sanitize(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return "";
+        var sb = new System.Text.StringBuilder(value.Length);
+        for (var i = 0; i < value.Length; i++)
+        {
+            var c = value[i];
+            if (c is '\v' or '\f' or '\u2028' or '\u2029') sb.Append('\n');
+            else if (char.IsHighSurrogate(c) && i + 1 < value.Length && char.IsLowSurrogate(value[i + 1])) { sb.Append(c).Append(value[++i]); }
+            else if (XmlConvert.IsXmlChar(c)) sb.Append(c);
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>Lê o DOCX mesmo aberto no Word (que mantém o arquivo aberto para escrita).</summary>
+    private static ZipArchive OpenShared(string path) =>
+        new(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete), ZipArchiveMode.Read, leaveOpen: false);
 
     private static XmlReaderSettings SafeXmlSettings() => new()
     {
