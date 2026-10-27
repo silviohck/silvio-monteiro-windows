@@ -108,6 +108,18 @@ try
         XNamespace w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
         Assert(x.Descendants(w + "br").Count() == 1 && x.Descendants(w + "t").Any(t => t.Value == "linha 2"), "quebra de linha vira w:br");
     }
+
+    // Texto colado do Word/Excel: quebra manual (0x0B), tabulação e caracteres de controle.
+    var pasted = Path.Combine(root, "colado.docx");
+    DocxService.Fill(template, pasted, new Dictionary<string, string> { ["NOME_PACIENTE"] = "A\u0001", ["CID"] = "M17.1\vS83\tok 👍" });
+    using (var m = ZipFile.OpenRead(pasted))
+    {
+        var x = XDocument.Load(m.GetEntry("word/document.xml")!.Open());
+        XNamespace w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+        var text = string.Concat(x.Descendants(w + "t").Select(t => t.Value));
+        Assert(x.Descendants(w + "br").Count() == 1 && x.Descendants(w + "tab").Count() == 1 && text.Contains("ok 👍") && !text.Contains('\u0001'),
+            "texto colado com caracteres de controle não impede gerar");
+    }
     Console.WriteLine("Todos os testes passaram.");
 }
 finally { try { Directory.Delete(root, recursive: true); } catch { } }

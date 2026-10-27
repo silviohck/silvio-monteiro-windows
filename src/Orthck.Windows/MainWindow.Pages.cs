@@ -19,7 +19,7 @@ public partial class MainWindow
         list.Columns.Add(new DataGridTextColumn { Header = "Nome", Binding = new System.Windows.Data.Binding("Nome"), Width = new DataGridLength(2, DataGridLengthUnitType.Star) });
         list.Columns.Add(new DataGridTextColumn { Header = "Nascimento", Binding = new System.Windows.Data.Binding("DataNascimento"), Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
         list.Columns.Add(new DataGridTextColumn { Header = "CPF", Binding = new System.Windows.Data.Binding("Cpf"), Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
-        void Reload() => list.ItemsSource = _storage.Data.Pacientes.Where(p => p.Nome.Contains(search.Text, StringComparison.OrdinalIgnoreCase) || p.Cpf.Contains(search.Text)).OrderBy(p => p.Nome).ToArray();
+        void Reload() => list.ItemsSource = _storage.Data.Pacientes.Where(p => Matches(p.Nome, search.Text) || p.Cpf.Contains(search.Text.Trim())).OrderBy(p => p.Nome).ToArray();
         search.TextChanged += (_, _) => Reload();
         panel.Children.Add(Text("Buscar por nome ou CPF")); panel.Children.Add(search); panel.Children.Add(list);
         var form = Column(); var name = Input(); var cpf = Input(); var birth = Input(); var rg = Input(); var phone = Input(); var email = Input(); var address = Input(); var convenio = Input(); var observations = Input();
@@ -238,14 +238,18 @@ public partial class MainWindow
         list.Columns.Add(new DataGridTextColumn { Header = "Código", Binding = new System.Windows.Data.Binding("Code"), Width = 150 });
         list.Columns.Add(new DataGridTextColumn { Header = "Descrição", Binding = new System.Windows.Data.Binding("Description"), Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
         var rows = LoadCodes(file);
-        void Refresh() => list.ItemsSource = rows.Where(x => x.Code.Contains(search.Text, StringComparison.OrdinalIgnoreCase) || x.Description.Contains(search.Text, StringComparison.OrdinalIgnoreCase)).Take(300).ToArray();
+        void Refresh() => list.ItemsSource = rows.Where(x => Matches(x.Code, search.Text) || Matches(x.Description, search.Text)).Take(300).ToArray();
         search.TextChanged += (_, _) => Refresh(); Refresh(); panel.Children.Add(list);
         var actions = new WrapPanel();
         actions.Children.Add(ActionButton("Importar tabela TSV…", () =>
         {
             var dialog = new Microsoft.Win32.OpenFileDialog { Filter = "Tabela tabulada (*.tsv;*.txt)|*.tsv;*.txt" };
             if (dialog.ShowDialog() != true) return;
+            // Um arquivo no formato errado não pode substituir a tabela que já funciona.
+            var count = LoadCodes(dialog.FileName).Count;
+            if (count == 0) throw new InvalidDataException("Nenhuma linha no formato código<TAB>descrição. A tabela atual foi mantida.");
             Directory.CreateDirectory(Path.GetDirectoryName(file)!); File.Copy(dialog.FileName, file, overwrite: true); ShowPage(Navigation.SelectedIndex);
+            MessageBox.Show($"{count} registros importados.", title);
         }));
         actions.Children.Add(ActionButton("Copiar código", () => { if (list.SelectedItem is CodeRow row) System.Windows.Clipboard.SetText(row.Code); }));
         actions.Children.Add(ActionButton("Copiar código e descrição", () => { if (list.SelectedItem is CodeRow row) System.Windows.Clipboard.SetText($"{row.Code} - {row.Description}"); }));
@@ -253,6 +257,10 @@ public partial class MainWindow
         panel.Children.Add(Secondary(rows.Count == 0 ? "Tabela ainda não importada. O repositório não publica bases de pacientes nem incorpora tabelas externas sem verificar a fonte e a versão." : $"{rows.Count} registros carregados. Os primeiros 300 resultados são exibidos para manter a interface rápida."));
         return Scroll(panel);
     }
+    /// <summary>Busca sem diferenciar maiúsculas e acentos ("colera" encontra "Cólera").</summary>
+    private static bool Matches(string text, string query) =>
+        System.Globalization.CultureInfo.InvariantCulture.CompareInfo.IndexOf(text, query.Trim(),
+            System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
     private sealed record CodeRow(string Code, string Description);
     private static List<CodeRow> LoadCodes(string path)
     {

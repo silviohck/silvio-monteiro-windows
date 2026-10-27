@@ -5,9 +5,21 @@ namespace Orthck.Windows;
 
 public partial class App : Application
 {
+    // Duas janelas do Orthck gravariam o mesmo dados.json (a última apagaria o que a outra salvou)
+    // e poderiam imprimir a mesma fila duas vezes.
+    private static Mutex? _singleInstance;
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        _singleInstance = new Mutex(true, @"Local\Orthck.Windows.Instancia", out var first);
+        if (!first)
+        {
+            MessageBox.Show("O Orthck já está aberto. Use a janela existente (veja a barra de tarefas).", "Orthck",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            Shutdown(0);
+            return;
+        }
         // Um erro inesperado numa tela não pode fechar o app no meio de um atendimento.
         DispatcherUnhandledException += (_, args) =>
         {

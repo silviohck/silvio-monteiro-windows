@@ -29,10 +29,25 @@ public partial class MainWindow : Window
         _queue.Changed += () => Dispatcher.InvokeAsync(() =>
         {
             if (Navigation.SelectedIndex == 1) ShowPage(1);
-            if (Navigation.Items[1] is ListBoxItem item)
-                item.Content = $"Fila de impressão ({_storage.Data.FilaImpressao.Count(x => x.Situacao == "pendente")})";
+            UpdateQueueBadge();
         });
+        // Fechar no meio do envio deixaria um Word invisível aberto e o item em situação incerta.
+        Closing += (_, e) =>
+        {
+            if (_queue.IsProcessing && MessageBox.Show("A fila ainda está enviando documentos ao Word. Fechar agora pode deixar a impressão incompleta. Fechar mesmo assim?",
+                    "Orthck", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+                e.Cancel = true;
+        };
+        UpdateQueueBadge();
         Navigation.SelectedIndex = 0;
+    }
+
+    /// <summary>Mostra os pendentes já ao abrir (inclusive os de uma sessão anterior).</summary>
+    private void UpdateQueueBadge()
+    {
+        if (Navigation.Items[1] is not ListBoxItem item) return;
+        var pending = _storage.Data.FilaImpressao.Count(x => x.Situacao == "pendente");
+        item.Content = pending == 0 ? "Fila de impressão" : $"Fila de impressão ({pending})";
     }
 
     private void Navigation_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -57,11 +72,12 @@ public partial class MainWindow : Window
     }
     private void ImportMac_Click(object sender, RoutedEventArgs e)
     {
+        if (_queue.IsProcessing) { MessageBox.Show("Aguarde a fila de impressão terminar antes de importar.", "Orthck"); return; }
         var picker = new OpenFileDialog { Title = "Importar dados.json do Orthck Mac", Filter = "Dados do Orthck (dados.json)|dados.json|JSON (*.json)|*.json" };
         if (picker.ShowDialog() != true) return;
         if (MessageBox.Show("A importação substituirá os cadastros, histórico e configurações locais atuais. Uma cópia anterior será preservada. Continuar?",
             "Confirmar importação", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
-        Try(() => { _storage.ImportMacData(picker.FileName); ShowPage(Navigation.SelectedIndex); MessageBox.Show("Dados importados. Escolha novamente a pasta de modelos, pois os caminhos do Mac são diferentes."); });
+        Try(() => { _storage.ImportMacData(picker.FileName); UpdateQueueBadge(); ShowPage(Navigation.SelectedIndex); MessageBox.Show("Dados importados. Escolha novamente a pasta de modelos, pois os caminhos do Mac são diferentes."); });
     }
 
     private StackPanel Column() => new() { Orientation = Orientation.Vertical, HorizontalAlignment = HorizontalAlignment.Stretch };
@@ -115,6 +131,7 @@ public partial class MainWindow : Window
         var fields = Column();
         var fieldEditors = new Dictionary<string, TextBox>();
         var fieldDefaults = new Dictionary<string, string>();
+        (string Path, DateTime Stamp, IReadOnlyList<string> Names)? fieldCache = null;
         var locationCard = Column();
         locationCard.Children.Add(Text("Local de atendimento")); locationCard.Children.Add(location);
         locationCard.Children.Add(Text("Tipo de documento")); locationCard.Children.Add(category);
@@ -171,7 +188,13 @@ public partial class MainWindow : Window
             ClearFields();
             if (model.SelectedItem is not TemplateInfo template) return;
             IReadOnlyList<string> names;
-            try { names = DocxService.Fields(template.FullPath); }
+            try
+            {
+                var stamp = File.GetLastWriteTimeUtc(template.FullPath);
+                if (fieldCache?.Path != template.FullPath || fieldCache.Value.Stamp != stamp)
+                    fieldCache = (template.FullPath, stamp, DocxService.Fields(template.FullPath));
+                names = fieldCache.Value.Names;
+            }
             catch (Exception ex) { fields.Children.Add(Secondary("Não foi possível ler o modelo: " + ex.Message)); return; }
             var clinicData = FindClinic(location.SelectedItem as string);
             var defaults = ClinicalFields.Defaults(names, PatientSelected(), clinicData, DateTimeOffset.Now);
