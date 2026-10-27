@@ -21,11 +21,14 @@ public sealed class Storage
         Directory.CreateDirectory(DirectoryPath);
         Data = Load(FilePath);
         // Em caso de interrupção entre disparo e confirmação não reenviar automaticamente.
-        foreach (var item in Data.FilaImpressao.Where(x => x.Situacao == "enviando"))
+        var interrupted = Data.FilaImpressao.Where(x => x.Situacao == "enviando").ToArray();
+        foreach (var item in interrupted)
         {
             item.Situacao = "incerto";
             item.Observacao = "Aplicativo interrompido durante envio: confira a impressora antes de reenviar.";
         }
+        // A recuperação deve sobreviver a outra reinicialização, sem reenviar automaticamente.
+        if (interrupted.Length != 0) Save();
     }
 
     public static AppData Load(string path)
@@ -47,9 +50,12 @@ public sealed class Storage
     {
         // A importação preserva integralmente a fonte e o estado anterior do Windows.
         var incoming = Load(source);
-        SaveSnapshot(Data, backupName: "antes-importacao");
+        var anterior = Data;
+        SaveSnapshot(anterior, backupName: "antes-importacao");
+        // Só altera a sessão depois de confirmar a gravação da nova versão.
+        // Uma falha de disco não pode deixar a interface com dados diferentes do arquivo.
+        SaveSnapshot(incoming);
         Data = incoming;
-        Save();
     }
 
     public void Save() => SaveSnapshot(Data);
