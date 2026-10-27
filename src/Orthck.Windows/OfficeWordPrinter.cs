@@ -11,15 +11,22 @@ public sealed class OfficeWordPrinter : IWordPrinter
 {
     /// <summary>Um diálogo invisível do Word (modo protegido, macro, conversão) travaria a fila para sempre.</summary>
     private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(5);
+    // Uma sessão COM travada não pode concorrer com o próximo paciente ou impressão.
+    private static readonly SemaphoreSlim WordGate = new(1, 1);
 
     public async Task<PrintResult> SubmitAsync(string documentPath, int copies, string? printerName, CancellationToken ct = default)
     {
+        if (!await WordGate.WaitAsync(0, ct))
+            return new PrintResult(PrintOutcome.Uncertain,
+                "Outra impressão do Word ainda está em andamento ou sem resposta. Não foram enviados novos documentos.");
         var completion = new TaskCompletionSource<PrintResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         var thread = new Thread(() =>
         {
             object? wordObject = null, docObject = null;
             string? previousPrinter = null;
             var sharedWord = false;
+            var result = new PrintResult(PrintOutcome.Uncertain,
+                "Não foi possível confirmar o término do envio.");
             try
             {
                 ct.ThrowIfCancellationRequested();
@@ -46,17 +53,17 @@ public sealed class OfficeWordPrinter : IWordPrinter
                 ct.ThrowIfCancellationRequested();
                 // Background:false espera o Word concluir o envio ao spooler, não a impressão física.
                 doc.PrintOut(Background: false, Copies: Math.Clamp(copies, 1, 20));
-                completion.TrySetResult(new PrintResult(PrintOutcome.Submitted, "Comando enviado ao Word. Confira a saída da impressora."));
+                result = new PrintResult(PrintOutcome.Submitted, "Comando enviado ao Word. Confira a saída da impressora.");
             }
             catch (OperationCanceledException)
             {
-                completion.TrySetResult(new PrintResult(PrintOutcome.Uncertain, "Operação interrompida. Confira a impressora antes de reenviar."));
+                result = new PrintResult(PrintOutcome.Uncertain, "Operação interrompida. Confira a impressora antes de reenviar.");
             }
             catch (Exception e)
             {
                 // Erro após iniciar o Word/abrir arquivo pode não garantir que nada foi enviado.
                 var outcome = docObject is null ? PrintOutcome.Failed : PrintOutcome.Uncertain;
-                completion.TrySetResult(new PrintResult(outcome, $"Não foi possível confirmar a impressão: {e.Message}"));
+                result = new PrintResult(outcome, $"Não foi possível confirmar a impressão: {e.Message}");
             }
             finally
             {
@@ -65,10 +72,22 @@ public sealed class OfficeWordPrinter : IWordPrinter
                 try { if (wordObject != null && !sharedWord) { dynamic w = wordObject; w.Quit(SaveChanges: false); } } catch { }
                 try { if (docObject != null && Marshal.IsComObject(docObject)) Marshal.FinalReleaseComObject(docObject); } catch { }
                 try { if (wordObject != null && Marshal.IsComObject(wordObject)) Marshal.FinalReleaseComObject(wordObject); } catch { }
+                // Não avançar a fila enquanto o Word ainda encerra a impressão anterior.
+                completion.TrySetResult(result);
             }
         }) { IsBackground = true, Name = "Orthck-Word-Printer" };
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
+        try
+        {
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+        }
+        catch
+        {
+            WordGate.Release();
+            throw;
+        }
+        // Mesmo no timeout, manter bloqueio até o COM terminar; evita dois Word simultâneos.
+        _ = completion.Task.ContinueWith(_ => WordGate.Release(), TaskScheduler.Default);
         if (await Task.WhenAny(completion.Task, Task.Delay(Timeout, CancellationToken.None)) == completion.Task)
             return await completion.Task;
         return new PrintResult(PrintOutcome.Uncertain,
