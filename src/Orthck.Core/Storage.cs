@@ -23,7 +23,9 @@ public sealed class Storage
         DirectoryPath = directoryPath ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Orthck");
         Directory.CreateDirectory(DirectoryPath);
         Data = Load(FilePath);
+        var interrupted = Data.FilaImpressao.Any(x => x.Situacao == "enviando");
         MarkInterruptedPrints(Data);
+        if (interrupted) Save(); // Estado "incerto" precisa sobreviver à próxima inicialização.
     }
 
     /// <summary>Em caso de interrupção entre disparo e confirmação não reenviar automaticamente.</summary>
@@ -60,8 +62,9 @@ public sealed class Storage
         if (incoming.PastaSincronizada.StartsWith('/')) incoming.PastaSincronizada = "";
         if (incoming.PastaDocumentos.StartsWith('/')) incoming.PastaDocumentos = "";
         SaveSnapshot(Data, backupName: "antes-importacao");
+        // Primeiro confirma a gravação do novo arquivo. Se houver erro, a sessão antiga permanece.
+        SaveSnapshot(incoming);
         Data = incoming;
-        Save();
     }
 
     public void Save() => SaveSnapshot(Data);
