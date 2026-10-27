@@ -9,6 +9,8 @@
     <AssemblyName>Orthck.Windows</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Não importar System.Windows.Forms globalmente: Button e Application pertencem ao WPF. -->
+    <Using Remove="System.Windows.Forms" />
     <ProjectReference Include="..\Orthck.Core\Orthck.Core.csproj" />
   </ItemGroup>
 </Project>
