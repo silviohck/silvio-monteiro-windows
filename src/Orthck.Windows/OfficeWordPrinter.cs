@@ -15,6 +15,7 @@ public sealed class OfficeWordPrinter : IWordPrinter
         var thread = new Thread(() =>
         {
             object? wordObject = null, docObject = null;
+            var result = new PrintResult(PrintOutcome.Uncertain, "Não foi possível confirmar o término do envio.");
             try
             {
                 ct.ThrowIfCancellationRequested();
@@ -32,17 +33,17 @@ public sealed class OfficeWordPrinter : IWordPrinter
                 ct.ThrowIfCancellationRequested();
                 // Background:false espera o Word concluir o envio ao spooler, não a impressão física.
                 doc.PrintOut(Background: false, Copies: Math.Clamp(copies, 1, 20));
-                completion.TrySetResult(new PrintResult(PrintOutcome.Submitted, "Comando enviado ao Word. Confira a saída da impressora."));
+                result = new PrintResult(PrintOutcome.Submitted, "Comando enviado ao Word. Confira a saída da impressora.");
             }
             catch (OperationCanceledException)
             {
-                completion.TrySetResult(new PrintResult(PrintOutcome.Uncertain, "Operação interrompida. Confira a impressora antes de reenviar."));
+                result = new PrintResult(PrintOutcome.Uncertain, "Operação interrompida. Confira a impressora antes de reenviar.");
             }
             catch (Exception e)
             {
                 // Erro após iniciar o Word/abrir arquivo pode não garantir que nada foi enviado.
                 var outcome = docObject is null ? PrintOutcome.Failed : PrintOutcome.Uncertain;
-                completion.TrySetResult(new PrintResult(outcome, $"Não foi possível confirmar a impressão: {e.Message}"));
+                result = new PrintResult(outcome, $"Não foi possível confirmar a impressão: {e.Message}");
             }
             finally
             {
@@ -50,6 +51,8 @@ public sealed class OfficeWordPrinter : IWordPrinter
                 try { if (wordObject != null) { dynamic w = wordObject; w.Quit(SaveChanges: false); } } catch { }
                 try { if (docObject != null && Marshal.IsComObject(docObject)) Marshal.FinalReleaseComObject(docObject); } catch { }
                 try { if (wordObject != null && Marshal.IsComObject(wordObject)) Marshal.FinalReleaseComObject(wordObject); } catch { }
+                // Só libera o próximo item depois de fechar documento e instância do Word.
+                completion.TrySetResult(result);
             }
         }) { IsBackground = true, Name = "Orthck-Word-Printer" };
         thread.SetApartmentState(ApartmentState.STA);
