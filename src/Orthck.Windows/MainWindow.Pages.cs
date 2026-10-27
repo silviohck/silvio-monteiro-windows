@@ -185,7 +185,9 @@ public partial class MainWindow
         var printer = new ComboBox { MinWidth = 260, HorizontalAlignment = HorizontalAlignment.Left };
         var choices = new List<string> { "Padrão do Windows" };
         try { choices.AddRange(System.Drawing.Printing.PrinterSettings.InstalledPrinters.Cast<string>()); } catch { /* Sem impressora instalada */ }
-        printer.ItemsSource = choices; printer.SelectedIndex = 0;
+        printer.ItemsSource = choices;
+        printer.SelectedIndex = Math.Max(0, choices.IndexOf(_chosenPrinter ?? ""));
+        printer.SelectionChanged += (_, _) => _chosenPrinter = printer.SelectedIndex <= 0 ? null : printer.SelectedItem as string;
         panel.Children.Add(Text("Impressora")); panel.Children.Add(printer);
         var list = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, SelectionMode = DataGridSelectionMode.Extended, Height = 392 };
         list.Columns.Add(new DataGridTextColumn { Header = "Paciente", Binding = new System.Windows.Data.Binding("Paciente"), Width = new DataGridLength(2, DataGridLengthUnitType.Star) });

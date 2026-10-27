@@ -23,7 +23,9 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Não foi possível carregar os dados do Orthck. Nenhum cadastro foi sobrescrito.\n\n{ex.Message}",
+            MessageBox.Show($"Não foi possível carregar os dados do Orthck. Nenhum cadastro foi sobrescrito.\n\n{ex.Message}\n\n" +
+                "A versão anterior fica em dados.backup.json (e cópias antes-importacao-*.json) na mesma pasta; " +
+                "para restaurá-la, feche o Orthck, guarde o dados.json atual e renomeie o backup para dados.json.",
                 "Orthck — Dados protegidos", MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown(1);
         }

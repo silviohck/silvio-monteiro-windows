@@ -45,6 +45,8 @@ try
     Assert(imported.Locais[0].Nome == "Clínica", "dados.json mantém campos do Mac");
     var fields = ClinicalFields.Defaults(["NOME_PACIENTE", "CID", "DATA", "CIDADE"], reopened.Data.Pacientes[0], clinic, DateTimeOffset.Now);
     Assert(fields["CID"] == "" && fields["CIDADE"] == "Campina Grande", "dados clínicos começam vazios");
+    var age = ClinicalFields.Defaults(["IDADE"], new Patient { DataNascimento = " 15/03/1990 " }, null, new DateTimeOffset(2026, 3, 14, 9, 0, 0, TimeSpan.Zero));
+    Assert(age["IDADE"] == "35", "idade ignora espaços e conta aniversário ainda não feito");
     var doc = new GeneratedDocument { Caminho = fileA, Modelo = "Laudo", Paciente = "A" };
     var mock = new TestPrinter();
     var queue = new PrintQueue(reopened, mock);

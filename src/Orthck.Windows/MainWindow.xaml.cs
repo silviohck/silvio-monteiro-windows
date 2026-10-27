@@ -15,6 +15,8 @@ public partial class MainWindow : Window
 {
     private readonly Storage _storage;
     private readonly PrintQueue _queue;
+    /// <summary>A página da fila é recriada a cada mudança; a impressora escolhida não pode voltar à padrão sem aviso.</summary>
+    private string? _chosenPrinter;
     private readonly SolidColorBrush _accent = new(Color.FromRgb(48, 97, 110));
     private readonly SolidColorBrush _muted = new(Color.FromRgb(101, 117, 125));
     private readonly SolidColorBrush _surface = new(Colors.White);
@@ -191,10 +193,13 @@ public partial class MainWindow : Window
         location.SelectionChanged += (_, _) => RefreshTemplates();
         category.SelectionChanged += (_, _) => RefreshModels();
         model.SelectionChanged += (_, _) => RefreshFields();
-        match.SelectionChanged += (_, _) => RefreshFields();
+        match.SelectionChanged += (_, _) => RefreshFields(keepTyped: true);
         name.TextChanged += (_, _) => RefreshPatient();
         generate.Click += async (_, _) =>
         {
+            // Um segundo clique durante a geração/impressão criaria outro DOCX e poderia imprimir em dobro.
+            if (!generate.IsEnabled) return;
+            generate.IsEnabled = false;
             try
             {
                 if (model.SelectedItem is not TemplateInfo template) throw new InvalidOperationException("Selecione um modelo antes de gerar.");
@@ -231,7 +236,7 @@ public partial class MainWindow : Window
                     var item = _queue.Add(doc, (int)(copies.SelectedItem ?? 1));
                     outcome = "Adicionado à fila.";
                     if (mode.SelectedIndex == 1)
-                        outcome = await _queue.SubmitAsync([item.Id], null)
+                        outcome = await _queue.SubmitAsync([item.Id], _chosenPrinter)
                             ? $"Impressão: {item.Situacao}. {item.Observacao}"
                             : "A fila já está imprimindo; o documento ficou pendente na fila.";
                 }
@@ -239,6 +244,7 @@ public partial class MainWindow : Window
                 name.Clear(); model.SelectedIndex = -1; ClearFields();
             }
             catch (Exception ex) { MessageBox.Show(ex.Message, "Orthck — Gerar documento", MessageBoxButton.OK, MessageBoxImage.Warning); }
+            finally { generate.IsEnabled = true; }
         };
         actions.Children.Add(generate); actions.Children.Add(next);
         bottom.Children.Add(actions); panel.Children.Add(Card(bottom));
