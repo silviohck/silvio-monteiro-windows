@@ -15,12 +15,11 @@ priorizando **previsibilidade, estabilidade e paridade funcional**.
 
 ## Baixar e testar
 
-Cada atualização da `main` publica uma versão de teste em **[Releases](https://github.com/silviohck/silvio-monteiro-windows/releases/latest)**:
+Cada atualização da `main` publica uma versão de teste em **[Releases](https://github.com/silviohck/silvio-monteiro-windows/releases/latest)** como um arquivo único, **Orthck.exe**: baixe e abra com dois cliques, sem instalar nada (o .NET vai dentro). Funciona em PCs com Windows e no Windows 11 de Macs com chip Apple (Parallels, VMware Fusion ou UTM).
 
-- **Orthck-Windows-x64.zip** — PCs com Windows comuns (Intel/AMD).
-- **Orthck-Windows-arm64.zip** — Windows 11 em Mac com chip Apple (Parallels, VMware Fusion ou UTM).
+Link direto da versão mais recente: https://github.com/silviohck/silvio-monteiro-windows/releases/latest/download/Orthck.exe
 
-Descompacte e abra `Orthck.Windows.exe` (não precisa instalar o .NET). Como o app ainda não tem assinatura digital, o Windows pode mostrar "O Windows protegeu o computador": clique em **Mais informações → Executar assim mesmo**. Para testar a fila sem papel, escolha a impressora **Microsoft Print to PDF**.
+No primeiro uso o Windows extrai algumas bibliotecas internas para uma pasta temporária, então a primeira abertura demora alguns segundos a mais. Como o app ainda não tem assinatura digital, o Windows pode mostrar "O Windows protegeu o computador": clique em **Mais informações → Executar assim mesmo**. Para testar a fila sem papel, escolha a impressora **Microsoft Print to PDF**.
 
 ## Compilar no Windows
 

@@ -20,26 +20,27 @@ jobs:
         run: dotnet run --project tests/Orthck.SmokeTests/Orthck.SmokeTests.csproj --configuration Release
       - name: Compilar aplicativo WPF
         run: dotnet build src/Orthck.Windows/Orthck.Windows.csproj --configuration Release
-      # x64: PCs comuns. arm64: Windows 11 em Mac com chip Apple (Parallels/VMware/UTM).
-      - name: Publicar versões de teste
+      # Um único Orthck.exe com o .NET e o WPF dentro: copiar e abrir, sem instalar nada.
+      # x64 também roda no Windows 11 de Macs com chip Apple (emulação).
+      - name: Publicar Orthck.exe (arquivo único)
+        run: >
+          dotnet publish src/Orthck.Windows/Orthck.Windows.csproj -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true
+          -p:DebugType=none -o dist
+      - name: Conferir arquivo único
         shell: pwsh
         run: |
-          foreach ($rid in 'win-x64', 'win-arm64') {
-            dotnet publish src/Orthck.Windows/Orthck.Windows.csproj -c Release -r $rid --self-contained true -p:PublishSingleFile=false -o "dist/Orthck-Windows-$rid"
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          }
+          $files = Get-ChildItem dist -File
+          $files | Format-Table Name, Length
+          if ($files.Count -ne 1) { throw "Esperado só o .exe em dist/, encontrado: $($files.Name -join ', ')" }
+          Move-Item dist/Orthck.Windows.exe dist/Orthck.exe
       - uses: actions/upload-artifact@v4
         with:
-          name: Orthck-Windows-x64
-          path: dist/Orthck-Windows-win-x64/
-          if-no-files-found: error
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Orthck-Windows-arm64
-          path: dist/Orthck-Windows-win-arm64/
+          name: Orthck-Windows
+          path: dist/Orthck.exe
           if-no-files-found: error
 
-  # Cada versão da main vira uma Release com os .zip: link direto, sem precisar abrir o Actions.
+  # Cada versão da main vira uma Release com o Orthck.exe: link direto, sem precisar abrir o Actions.
   release:
     needs: windows
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -54,16 +55,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cd pacotes
-          (cd Orthck-Windows-x64 && zip -qr ../Orthck-Windows-x64.zip .)
-          (cd Orthck-Windows-arm64 && zip -qr ../Orthck-Windows-arm64.zip .)
+          cd pacotes/Orthck-Windows
           tag="v0.1.${{ github.run_number }}"
-          gh release create "$tag" Orthck-Windows-x64.zip Orthck-Windows-arm64.zip \
+          gh release create "$tag" Orthck.exe \
             --repo "${{ github.repository }}" --target "${{ github.sha }}" --latest \
             --title "Orthck Windows $tag (versão de teste)" \
             --notes "Versão de teste gerada automaticamente a partir da main (${{ github.sha }}). Não homologada para uso clínico.
 
-          - **Orthck-Windows-x64.zip**: PCs com Windows comuns (Intel/AMD).
-          - **Orthck-Windows-arm64.zip**: Windows 11 em Mac com chip Apple (Parallels, VMware Fusion, UTM).
-
-          Descompacte e abra \`Orthck.Windows.exe\`. Se aparecer \"O Windows protegeu o computador\", clique em **Mais informações → Executar assim mesmo** (o app ainda não tem assinatura digital)."
+          Baixe **Orthck.exe** e abra com dois cliques: é um arquivo único, não precisa instalar nada. Se aparecer \"O Windows protegeu o computador\", clique em **Mais informações → Executar assim mesmo** (o app ainda não tem assinatura digital)."
