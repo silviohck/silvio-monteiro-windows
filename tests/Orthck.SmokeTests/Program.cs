@@ -67,6 +67,11 @@ try
     Assert(invalidRejected && reopened.Data.Pacientes.Single().Id == beforeID
         && Storage.Load(reopened.FilePath).Pacientes.Single().Id == beforeID,
         "importação de dados inválidos não perde nem modifica os cadastros locais");
+    var missingRejected = false;
+    try { reopened.ImportMacData(Path.Combine(root, "inexistente.json")); }
+    catch (FileNotFoundException) { missingRejected = true; }
+    Assert(missingRejected && reopened.Data.Pacientes.Single().Id == beforeID,
+        "importação de arquivo ausente não substitui cadastros por base vazia");
     var age = ClinicalFields.Defaults(["IDADE"], new Patient { DataNascimento = " 15/03/1990 " }, null, new DateTimeOffset(2026, 3, 14, 9, 0, 0, TimeSpan.Zero));
     Assert(age["IDADE"] == "35", "idade ignora espaços e conta aniversário ainda não feito");
     var doc = new GeneratedDocument { Caminho = fileA, Modelo = "Laudo", Paciente = "A" };
