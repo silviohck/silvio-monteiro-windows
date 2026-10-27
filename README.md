@@ -13,6 +13,15 @@ priorizando **previsibilidade, estabilidade e paridade funcional**.
 - **JSON compatível com `dados.json` do Mac**, gravação com arquivo temporário + substituição atômica + backup. SQLite pode ser incorporado depois de uma migração reversível e testada.
 - **Testes independentes do Word**: campos divididos entre runs, pacientes consecutivos, CID, persistência e não duplicação de impressões.
 
+## Baixar e testar
+
+Cada atualização da `main` publica uma versão de teste em **[Releases](https://github.com/silviohck/silvio-monteiro-windows/releases/latest)**:
+
+- **Orthck-Windows-x64.zip** — PCs com Windows comuns (Intel/AMD).
+- **Orthck-Windows-arm64.zip** — Windows 11 em Mac com chip Apple (Parallels, VMware Fusion ou UTM).
+
+Descompacte e abra `Orthck.Windows.exe` (não precisa instalar o .NET). Como o app ainda não tem assinatura digital, o Windows pode mostrar "O Windows protegeu o computador": clique em **Mais informações → Executar assim mesmo**. Para testar a fila sem papel, escolha a impressora **Microsoft Print to PDF**.
+
 ## Compilar no Windows
 
 Instale Windows 11, Visual Studio com suporte a WPF e SDK do .NET 10; para impressão direta, tenha o **Microsoft Word desktop** instalado.
