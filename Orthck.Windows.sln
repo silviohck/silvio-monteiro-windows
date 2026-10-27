@@ -1,0 +1,30 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Orthck.Core", "src\Orthck.Core\Orthck.Core.csproj", "{0FC3EB25-CA47-4D35-B100-035AF4739E3E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Orthck.Windows", "src\Orthck.Windows\Orthck.Windows.csproj", "{F6D2D43A-FA97-4C28-8C51-06C27EEC4928}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Orthck.SmokeTests", "tests\Orthck.SmokeTests\Orthck.SmokeTests.csproj", "{9C68F6E3-E189-4BCA-98F9-15E71C8534E5}"
+EndProject
+Global
+    GlobalSection(SolutionConfigurationPlatforms) = preSolution
+        Debug|Any CPU = Debug|Any CPU
+        Release|Any CPU = Release|Any CPU
+    EndGlobalSection
+    GlobalSection(ProjectConfigurationPlatforms) = postSolution
+        {0FC3EB25-CA47-4D35-B100-035AF4739E3E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+        {0FC3EB25-CA47-4D35-B100-035AF4739E3E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+        {0FC3EB25-CA47-4D35-B100-035AF4739E3E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+        {0FC3EB25-CA47-4D35-B100-035AF4739E3E}.Release|Any CPU.Build.0 = Release|Any CPU
+        {F6D2D43A-FA97-4C28-8C51-06C27EEC4928}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+        {F6D2D43A-FA97-4C28-8C51-06C27EEC4928}.Debug|Any CPU.Build.0 = Debug|Any CPU
+        {F6D2D43A-FA97-4C28-8C51-06C27EEC4928}.Release|Any CPU.ActiveCfg = Release|Any CPU
+        {F6D2D43A-FA97-4C28-8C51-06C27EEC4928}.Release|Any CPU.Build.0 = Release|Any CPU
+        {9C68F6E3-E189-4BCA-98F9-15E71C8534E5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+        {9C68F6E3-E189-4BCA-98F9-15E71C8534E5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+        {9C68F6E3-E189-4BCA-98F9-15E71C8534E5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+        {9C68F6E3-E189-4BCA-98F9-15E71C8534E5}.Release|Any CPU.Build.0 = Release|Any CPU
+    EndGlobalSection
+EndGlobal

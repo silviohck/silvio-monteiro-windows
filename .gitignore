@@ -1,0 +1,17 @@
+**/bin/
+**/obj/
+.vs/
+*.user
+*.suo
+.DS_Store
+*.log
+TestResults/
+# Nunca registrar cadastros ou documentos reais.
+dados.json
+**/Documentos/
+**/Pacientes/
+*.docx
+*.doc
+*.db
+*.db-shm
+*.db-wal

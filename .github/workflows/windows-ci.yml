@@ -1,0 +1,27 @@
+name: Windows — compilar e testar Orthck
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+jobs:
+  windows:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Compilar núcleo
+        run: dotnet build src/Orthck.Core/Orthck.Core.csproj --configuration Release
+      - name: Testes de regressão sem Word
+        run: dotnet run --project tests/Orthck.SmokeTests/Orthck.SmokeTests.csproj --configuration Release
+      - name: Compilar aplicativo WPF
+        run: dotnet build src/Orthck.Windows/Orthck.Windows.csproj --configuration Release
+      - name: Publicar versão de teste
+        run: dotnet publish src/Orthck.Windows/Orthck.Windows.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -o dist/Orthck-Windows
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Orthck-Windows-x64
+          path: dist/Orthck-Windows/
+          if-no-files-found: error
