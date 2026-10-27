@@ -16,8 +16,8 @@ try
     {
         var types = zip.CreateEntry("[Content_Types].xml");
         using (var w = new StreamWriter(types.Open())) w.Write("<Types/>");
-        var doc = zip.CreateEntry("word/document.xml");
-        using var writer = new StreamWriter(doc.Open());
+        var xmlEntry = zip.CreateEntry("word/document.xml");
+        using var writer = new StreamWriter(xmlEntry.Open());
         writer.Write("<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:body><w:p><w:r><w:t>Atesto: {{NOME_</w:t></w:r><w:r><w:t>PACIENTE}} CID {{CID}}</w:t></w:r></w:p></w:body></w:document>");
     }
     Assert(DocxService.Fields(template).SequenceEqual(["NOME_PACIENTE", "CID"]), "localiza campos divididos entre runs");
