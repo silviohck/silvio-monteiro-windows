@@ -26,6 +26,11 @@ try
     DocxService.Fill(template, fileA, new Dictionary<string, string> { ["NOME_PACIENTE"] = "Paciente A", ["CID"] = "M17.1" });
     DocxService.Fill(template, fileB, new Dictionary<string, string> { ["NOME_PACIENTE"] = "Paciente B", ["CID"] = "S83.5" });
     Assert(DocxService.Fields(fileA).Count == 0, "nenhum campo pendente após preenchimento");
+    var overwriteBlocked = false;
+    try { DocxService.Fill(template, fileA, new Dictionary<string, string> { ["NOME_PACIENTE"] = "OUTRO" }); }
+    catch (IOException) { overwriteBlocked = true; }
+    Assert(overwriteBlocked && DocxService.Fields(template).Count == 2,
+        "documento já gerado não é sobrescrito e o modelo original fica intacto");
     using (var a = ZipFile.OpenRead(fileA))
     using (var b = ZipFile.OpenRead(fileB))
     {
@@ -45,6 +50,28 @@ try
     Assert(imported.Locais[0].Nome == "Clínica", "dados.json mantém campos do Mac");
     var fields = ClinicalFields.Defaults(["NOME_PACIENTE", "CID", "DATA", "CIDADE"], reopened.Data.Pacientes[0], clinic, DateTimeOffset.Now);
     Assert(fields["CID"] == "" && fields["CIDADE"] == "Campina Grande", "dados clínicos começam vazios");
+    ClinicalFields.UpdatePermanentFields(reopened.Data.Pacientes[0], new Dictionary<string, string>
+    {
+        ["CID"] = "S83.5", ["CONDUTA"] = "Cirurgia", ["TELEFONE"] = "11999999999"
+    });
+    Assert(reopened.Data.Pacientes[0].Telefone == "11999999999"
+        && reopened.Data.Pacientes[0].OutrosCampos.Count == 0,
+        "CID e conduta de um atendimento não são salvos no cadastro permanente");
+
+    var invalid = Path.Combine(root, "mac-corrompido.json");
+    File.WriteAllText(invalid, "{ json invalido");
+    var beforeID = reopened.Data.Pacientes[0].Id;
+    var invalidRejected = false;
+    try { reopened.ImportMacData(invalid); }
+    catch (InvalidDataException) { invalidRejected = true; }
+    Assert(invalidRejected && reopened.Data.Pacientes.Single().Id == beforeID
+        && Storage.Load(reopened.FilePath).Pacientes.Single().Id == beforeID,
+        "importação de dados inválidos não perde nem modifica os cadastros locais");
+    var missingRejected = false;
+    try { reopened.ImportMacData(Path.Combine(root, "inexistente.json")); }
+    catch (FileNotFoundException) { missingRejected = true; }
+    Assert(missingRejected && reopened.Data.Pacientes.Single().Id == beforeID,
+        "importação de arquivo ausente não substitui cadastros por base vazia");
     var age = ClinicalFields.Defaults(["IDADE"], new Patient { DataNascimento = " 15/03/1990 " }, null, new DateTimeOffset(2026, 3, 14, 9, 0, 0, TimeSpan.Zero));
     Assert(age["IDADE"] == "35", "idade ignora espaços e conta aniversário ainda não feito");
     var doc = new GeneratedDocument { Caminho = fileA, Modelo = "Laudo", Paciente = "A" };
@@ -57,7 +84,25 @@ try
     await queue.SubmitAsync([q.Id], null);
     Assert(mock.Sent == 1, "não imprime novamente de forma automática");
     q.Situacao = "enviando"; reopened.Save();
-    Assert(new Storage(reopened.DirectoryPath).Data.FilaImpressao.Single().Situacao == "incerto", "envio interrompido exige conferência");
+    var recovered = new Storage(reopened.DirectoryPath);
+    Assert(recovered.Data.FilaImpressao.Single().Situacao == "incerto", "envio interrompido exige conferência");
+    Assert(Storage.Load(reopened.FilePath).FilaImpressao.Single().Situacao == "incerto",
+        "status incerto é gravado para permanecer após reinício");
+    Assert(!recovered.Data.FilaImpressao.Any(x => x.Situacao == "pendente"),
+        "nenhum documento interrompido volta automaticamente para impressão");
+
+    // Após resultado incerto, os próximos documentos devem continuar pendentes.
+    var stalledPrinter = new UncertainPrinter();
+    var haltedQueue = new PrintQueue(recovered, stalledPrinter);
+    var first = haltedQueue.Add(new GeneratedDocument { Caminho = fileA, Paciente = "A", Modelo = "Laudo" }, 1);
+    var second = haltedQueue.Add(new GeneratedDocument { Caminho = fileB, Paciente = "B", Modelo = "Atestado" }, 2);
+    await haltedQueue.SubmitAsync([first.Id, second.Id], null);
+    Assert(first.Situacao == "incerto" && second.Situacao == "pendente" && stalledPrinter.Attempts == 1,
+        "impressão incerta interrompe o lote antes do próximo paciente");
+    await haltedQueue.SubmitAsync([first.Id], null);
+    Assert(stalledPrinter.Attempts == 1, "documento incerto nunca é reenviado automaticamente");
+    Assert(haltedQueue.ConfirmRetry(first.Id) && first.Situacao == "pendente",
+        "reenvio do documento incerto exige confirmação");
     Assert(PathRules.SafeComponent("Relatório: Joelho/Esquerdo") == "Relatório- Joelho-Esquerdo", "protege nomes de arquivos");
     Assert(PathRules.SafeComponent("CON") == "_CON" && PathRules.SafeComponent("com1.txt") == "_com1.txt", "evita nomes reservados do Windows");
 
@@ -123,6 +168,16 @@ try
     Console.WriteLine("Todos os testes passaram.");
 }
 finally { try { Directory.Delete(root, recursive: true); } catch { } }
+
+sealed class UncertainPrinter : IWordPrinter
+{
+    public int Attempts { get; private set; }
+    public Task<PrintResult> SubmitAsync(string path, int copies, string? printer, CancellationToken token = default)
+    {
+        Attempts++;
+        return Task.FromResult(new PrintResult(PrintOutcome.Uncertain, "Verifique a impressora."));
+    }
+}
 
 sealed class TestPrinter : IWordPrinter
 {

@@ -23,7 +23,9 @@ public sealed class Storage
         DirectoryPath = directoryPath ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Orthck");
         Directory.CreateDirectory(DirectoryPath);
         Data = Load(FilePath);
+        var interrupted = Data.FilaImpressao.Any(x => x.Situacao == "enviando");
         MarkInterruptedPrints(Data);
+        if (interrupted) Save(); // Estado "incerto" precisa sobreviver à próxima inicialização.
     }
 
     /// <summary>Em caso de interrupção entre disparo e confirmação não reenviar automaticamente.</summary>
@@ -53,6 +55,9 @@ public sealed class Storage
 
     public void ImportMacData(string source)
     {
+        // A ausência da origem não é equivalente a um cadastro vazio. Nunca apagar o Windows.
+        if (!File.Exists(source))
+            throw new FileNotFoundException("O arquivo de dados do Mac não foi encontrado. Nenhum cadastro foi alterado.", source);
         // A importação preserva integralmente a fonte e o estado anterior do Windows.
         var incoming = Load(source);
         MarkInterruptedPrints(incoming);
@@ -60,8 +65,9 @@ public sealed class Storage
         if (incoming.PastaSincronizada.StartsWith('/')) incoming.PastaSincronizada = "";
         if (incoming.PastaDocumentos.StartsWith('/')) incoming.PastaDocumentos = "";
         SaveSnapshot(Data, backupName: "antes-importacao");
+        // Primeiro confirma a gravação do novo arquivo. Se houver erro, a sessão antiga permanece.
+        SaveSnapshot(incoming);
         Data = incoming;
-        Save();
     }
 
     public void Save() => SaveSnapshot(Data);

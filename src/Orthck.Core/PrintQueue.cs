@@ -94,6 +94,9 @@ public sealed class PrintQueue
                 };
                 item.Observacao = result.Detail;
                 Persist();
+                // Resultado incerto pode indicar Word bloqueado ainda imprimindo.
+                // Nunca continuar o lote sem confirmação do usuário.
+                if (result.Outcome == PrintOutcome.Uncertain) break;
             }
             return true;
         }
