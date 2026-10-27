@@ -130,7 +130,6 @@ public partial class MainWindow : Window
         var match = new ComboBox { Visibility = Visibility.Collapsed, DisplayMemberPath = "Display" };
         var fields = Column();
         var fieldEditors = new Dictionary<string, TextBox>();
-        var fieldDefaults = new Dictionary<string, string>();
         (string Path, DateTime Stamp, IReadOnlyList<string> Names)? fieldCache = null;
         var locationCard = Column();
         locationCard.Children.Add(Text("Local de atendimento")); locationCard.Children.Add(location);
@@ -147,7 +146,7 @@ public partial class MainWindow : Window
         bottom.Children.Add(Text("Quantidade de cópias")); bottom.Children.Add(copies);
         var actions = new WrapPanel();
         var generate = new Button { Content = "Gerar documento" };
-        void ClearFields() { fields.Children.Clear(); fieldEditors.Clear(); fieldDefaults.Clear(); }
+        void ClearFields() { fields.Children.Clear(); fieldEditors.Clear(); }
         var next = ActionButton("Próximo paciente", () => { name.Clear(); model.SelectedIndex = -1; ClearFields(); });
         void RefreshTemplates()
         {
@@ -171,20 +170,17 @@ public partial class MainWindow : Window
             match.ItemsSource = candidates;
             match.Visibility = candidates.Length > 1 ? Visibility.Visible : Visibility.Collapsed;
             match.SelectedIndex = -1;
-            RefreshFields(keepTyped: true);
+            // Mudança no nome inicia novo contexto; nunca herdar CID/conduta do paciente anterior.
+            RefreshFields();
         }
         Patient? PatientSelected()
         {
             if (match.Visibility == Visibility.Visible) return (match.SelectedItem as PatientChoice)?.Patient;
             return _storage.Data.Pacientes.FirstOrDefault(x => x.Nome.Equals(name.Text.Trim(), StringComparison.OrdinalIgnoreCase));
         }
-        // keepTyped: ao trocar/corrigir o paciente, o que já foi digitado nos campos (CID, conduta…) é mantido;
-        // só os valores que ainda são os automáticos do cadastro anterior são recalculados.
-        void RefreshFields(bool keepTyped = false)
+        // Campos específicos do atendimento sempre recomeçam vazios ao mudar nome/homônimo/modelo.
+        void RefreshFields()
         {
-            var typed = keepTyped
-                ? fieldEditors.Where(kv => kv.Value.Text != fieldDefaults.GetValueOrDefault(kv.Key, "")).ToDictionary(kv => kv.Key, kv => kv.Value.Text)
-                : [];
             ClearFields();
             if (model.SelectedItem is not TemplateInfo template) return;
             IReadOnlyList<string> names;
@@ -201,13 +197,17 @@ public partial class MainWindow : Window
             foreach (var field in names.Where(x => !ClinicalFields.IsPatientName(x)))
             {
                 fields.Children.Add(Text(field));
-                fieldDefaults[field] = defaults.GetValueOrDefault(field, "");
-                var input = Input(typed.TryGetValue(field, out var kept) ? kept : fieldDefaults[field]);
+                var input = Input(defaults.GetValueOrDefault(field, ""));
                 var key = ClinicalFields.Key(field);
-                if (key.Contains("DIAGNOSTICO") || key.Contains("CONDUTA") || key.Contains("OBSERVAC") || key.Contains("HISTORIA"))
+                if (new[] { "DIAGNOSTICO", "CONDUTA", "OBSERVAC", "HISTORIA", "ANAMNESE",
+                            "EXAME_FISICO", "RELATORIO", "JUSTIFICATIVA", "TRATAMENTO" }
+                    .Any(key.Contains))
                 {
-                    input.Height = 82; input.AcceptsReturn = true; input.TextWrapping = TextWrapping.Wrap;
+                    input.AcceptsReturn = true;
+                    input.TextWrapping = TextWrapping.Wrap;
                     input.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+                    input.MinHeight = 90;
+                    input.MaxHeight = 220;
                 }
                 fieldEditors[field] = input;
                 fields.Children.Add(input);
@@ -216,7 +216,7 @@ public partial class MainWindow : Window
         location.SelectionChanged += (_, _) => RefreshTemplates();
         category.SelectionChanged += (_, _) => RefreshModels();
         model.SelectionChanged += (_, _) => RefreshFields();
-        match.SelectionChanged += (_, _) => RefreshFields(keepTyped: true);
+        match.SelectionChanged += (_, _) => RefreshFields();
         name.TextChanged += (_, _) => RefreshPatient();
         generate.Click += async (_, _) =>
         {
