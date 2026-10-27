@@ -169,8 +169,15 @@ public partial class MainWindow : Window
             {
                 fields.Children.Add(Text(field));
                 var input = Input(defaults.GetValueOrDefault(field, ""));
-                if (field.Contains("DIAGNOSTICO", StringComparison.OrdinalIgnoreCase) || field.Contains("CONDUTA", StringComparison.OrdinalIgnoreCase))
-                    input.Height = 82;
+                if (new[] { "DIAGNOSTICO", "CONDUTA", "HISTORIA", "ANAMNESE", "EXAME_FISICO", "RELATORIO", "JUSTIFICATIVA", "OBSERVAC", "TRATAMENTO" }
+                    .Any(term => ClinicalFields.Key(field).Contains(term, StringComparison.Ordinal)))
+                {
+                    input.AcceptsReturn = true;
+                    input.TextWrapping = TextWrapping.Wrap;
+                    input.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+                    input.MinHeight = 90;
+                    input.MaxHeight = 220;
+                }
                 fieldEditors[field] = input;
                 fields.Children.Add(input);
             }
@@ -180,8 +187,12 @@ public partial class MainWindow : Window
         model.SelectionChanged += (_, _) => RefreshFields();
         match.SelectionChanged += (_, _) => RefreshFields();
         name.TextChanged += (_, _) => RefreshPatient();
+        var geracaoEmAndamento = false;
         generate.Click += async (_, _) =>
         {
+            if (geracaoEmAndamento) return;
+            geracaoEmAndamento = true;
+            generate.IsEnabled = false;
             try
             {
                 if (model.SelectedItem is not TemplateInfo template) throw new InvalidOperationException("Selecione um modelo antes de gerar.");
@@ -215,10 +226,24 @@ public partial class MainWindow : Window
                     var item = _queue.Add(doc, (int)(copies.SelectedItem ?? 1));
                     if (mode.SelectedIndex == 1) await _queue.SubmitAsync([item.Id], null);
                 }
-                MessageBox.Show($"Documento salvo:\n{path}\n\n{(mode.SelectedIndex == 0 ? "Adicionado à fila." : mode.SelectedIndex == 1 ? "Enviado para processamento da impressão." : "Somente salvo.")}", "Orthck");
+                var status = mode.SelectedIndex == 0 ? "Adicionado à fila."
+                    : mode.SelectedIndex == 2 ? "Somente salvo."
+                    : _storage.Data.FilaImpressao.FirstOrDefault(x => x.DocumentoID == doc.Id)?.Situacao switch
+                    {
+                        "enviado" => "Comando de impressão enviado ao Word. Confira o papel.",
+                        "erro" => "Falha no envio. Verifique a fila de impressão.",
+                        "incerto" => "Envio incerto. Verifique a impressora antes de reenviar.",
+                        _ => "Documento incluído na fila; impressão ainda pendente."
+                    };
+                MessageBox.Show($"Documento salvo:\n{path}\n\n{status}", "Orthck");
                 name.Clear(); model.SelectedIndex = -1; fields.Children.Clear(); fieldEditors.Clear();
             }
             catch (Exception ex) { MessageBox.Show(ex.Message, "Orthck — Gerar documento", MessageBoxButton.OK, MessageBoxImage.Warning); }
+            finally
+            {
+                geracaoEmAndamento = false;
+                generate.IsEnabled = true;
+            }
         };
         actions.Children.Add(generate); actions.Children.Add(next);
         bottom.Children.Add(actions); panel.Children.Add(Card(bottom));
