@@ -32,7 +32,7 @@ O workflow **Windows — compilar e testar Orthck** também publica uma compila�
 
 ## Primeiro uso
 
-1. Na aba **Modelos**, clique em **Escolher pasta de modelos**, indicando a pasta onde os DOCX estão organizados como `Local / Tipo / Modelo.docx` (subpastas adicionais são aceitas).
+1. Na aba **Modelos**, clique em **Escolher pasta de modelos**, indicando a pasta onde os DOCX estão organizados como `Local / Tipo / Modelo.docx` (subpastas adicionais são aceitas). Como no Mac, a pasta `1 - APAC` (e as demais de `pastasCompartilhadas` no `dados.json`) vale para todos os locais e aparece como um tipo em cada um; as `pastasIgnoradas` não viram locais.
 2. Configure a pasta principal dos documentos gerados. O padrão é `Documentos/Orthck`.
 3. Cadastre os locais ou importe uma cópia de `dados.json` do Mac, pelo botão **Importar dados do Mac**. A importação não remove o arquivo original e cria um backup dos dados locais anteriores.
 4. Em **Gerar documento**, escolha local, tipo e modelo, preencha o paciente e gere o documento. O padrão é adicionar à **Fila de impressão**.
@@ -61,6 +61,10 @@ Em cada aba de códigos, **Importar tabela TSV…** e escolha o arquivo correspo
 5. Histórico e DOCX são preservados quando um item é removido da fila.
 6. O projeto macOS **não é modificado** pela portabilidade.
 
-## Publicação no GitHub
+## Compilar fora do Windows
 
-Crie o repositório **`silvio-monteiro-windows`**, vazio e preferencialmente privado até a revisão de segurança. Copie esta pasta inteira para ele, execute `git init`, `git add .`, `git commit` e `git push`. A conexão GitHub que gerou este pacote tinha permissão para arquivos de repositórios existentes, mas não disponibilizava a operação de criação de repositório. Nenhum link de repositório Windows deve ser considerado existente antes de sua criação.
+O núcleo e os testes rodam em qualquer sistema com o SDK do .NET 10. O app WPF também compila (sem executar) no Linux/macOS com:
+
+```bash
+dotnet build Orthck.Windows.sln -c Release -p:EnableWindowsTargeting=true
+```

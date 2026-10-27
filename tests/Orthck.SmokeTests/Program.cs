@@ -57,6 +57,55 @@ try
     q.Situacao = "enviando"; reopened.Save();
     Assert(new Storage(reopened.DirectoryPath).Data.FilaImpressao.Single().Situacao == "incerto", "envio interrompido exige conferência");
     Assert(PathRules.SafeComponent("Relatório: Joelho/Esquerdo") == "Relatório- Joelho-Esquerdo", "protege nomes de arquivos");
+    Assert(PathRules.SafeComponent("CON") == "_CON" && PathRules.SafeComponent("com1.txt") == "_com1.txt", "evita nomes reservados do Windows");
+
+    // Datas no mesmo formato do Mac (ISO 8601 sem frações), lidas no fuso local.
+    var json = File.ReadAllText(reopened.FilePath);
+    Assert(System.Text.RegularExpressions.Regex.IsMatch(json, "\"criadoEm\": \"\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\dZ\""), "datas gravadas como o Mac lê");
+    var macFile = Path.Combine(root, "mac.json");
+    File.WriteAllText(macFile, """
+        {"pacientes":[{"id":"E621E1F8-C36C-495A-93FC-0C247A3E6E5F","nome":"Maria"}],
+         "historico":[{"id":"9C68F6E3-E189-4BCA-98F9-15E71C8534E5","modelo":"Laudo","paciente":"Maria","caminho":"/Users/x/a.docx","data":"2026-10-27T13:00:00Z"}],
+         "filaImpressao":[{"id":"0FC3EB25-CA47-4D35-B100-035AF4739E3E","documentoID":"9C68F6E3-E189-4BCA-98F9-15E71C8534E5","caminho":"/Users/x/a.docx","modelo":"Laudo","paciente":"Maria","copias":1,"criadoEm":"2026-10-27T13:00:00Z","situacao":"enviando"}],
+         "pastaSincronizada":"/Users/x/Modelos","pastasCompartilhadas":["1 - APAC"],"campoFuturo":42}
+        """);
+    var macStore = new Storage(Path.Combine(root, "importado"));
+    macStore.ImportMacData(macFile);
+    Assert(macStore.Data.Historico[0].Data == new DateTimeOffset(2026, 10, 27, 13, 0, 0, TimeSpan.Zero), "lê datas do Mac");
+    Assert(macStore.Data.Historico[0].Data.Offset == TimeZoneInfo.Local.GetUtcOffset(macStore.Data.Historico[0].Data), "data exibida no fuso local");
+    Assert(macStore.Data.FilaImpressao[0].Situacao == "incerto", "importação não deixa item preso em 'enviando'");
+    Assert(macStore.Data.PastaSincronizada == "", "caminho do Mac não é usado como pasta do Windows");
+    Assert(File.ReadAllText(macStore.FilePath).Contains("campoFuturo"), "preserva campos desconhecidos do Mac");
+
+    // Reimpressão explícita de um documento já enviado.
+    q.Situacao = "enviado";
+    var again = queue.Add(doc, 1);
+    Assert(again.Id != q.Id && again.Situacao == "pendente", "documento enviado pode voltar à fila para reimpressão");
+    Assert(queue.Add(doc, 1).Id == again.Id, "reimpressão também não duplica");
+
+    // Pastas compartilhadas e ignoradas, como no Mac.
+    var models = Path.Combine(root, "modelos");
+    foreach (var rel in new[] { "Clínica A/Atestados/Atestado.docx", "1 - APAC/Joelho/APAC joelho.docx", "1 - APAC/Geral.docx", "Arquivo/Velhos/Antigo.docx" })
+    {
+        var full = Path.Combine(models, rel.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(full)!); File.Copy(template, full);
+    }
+    var scanned = TemplateCatalog.Scan(models, ["Arquivo"], ["1 - Apac"]);
+    Assert(scanned.Count == 3 && !scanned.Any(x => x.DisplayName == "Antigo"), "ignora pastas que não são locais");
+    var apac = scanned.Where(x => x.Clinic == "").ToArray();
+    Assert(apac.Length == 2 && apac.All(x => x.Category == "1 - APAC" && x.AppliesTo("Clínica A") && x.AppliesTo("Outra")), "pasta compartilhada vale para todos os locais");
+    Assert(apac.Single(x => x.DisplayName == "APAC joelho").Subpath == "Joelho", "subpastas da pasta compartilhada");
+    Assert(scanned.Single(x => x.DisplayName == "Atestado").AppliesTo("CLINICA A") && !scanned.Single(x => x.DisplayName == "Atestado").AppliesTo("Outra"), "modelo do local só aparece nele");
+
+    // Quebra de linha em campo vira w:br.
+    var multi = Path.Combine(root, "multi.docx");
+    DocxService.Fill(template, multi, new Dictionary<string, string> { ["NOME_PACIENTE"] = "A", ["CID"] = "linha 1\nlinha 2" });
+    using (var m = ZipFile.OpenRead(multi))
+    {
+        var x = XDocument.Load(m.GetEntry("word/document.xml")!.Open());
+        XNamespace w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+        Assert(x.Descendants(w + "br").Count() == 1 && x.Descendants(w + "t").Any(t => t.Value == "linha 2"), "quebra de linha vira w:br");
+    }
     Console.WriteLine("Todos os testes passaram.");
 }
 finally { try { Directory.Delete(root, recursive: true); } catch { } }

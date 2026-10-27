@@ -97,7 +97,8 @@ public partial class MainWindow : Window
         var panel = Column();
         panel.Children.Add(Heading("Gerar documento"));
         panel.Children.Add(Secondary("Preencha o modelo Word, salve o DOCX e adicione à fila para imprimir ao final dos atendimentos."));
-        var templates = DiscoverTemplates();
+        var templates = DiscoverTemplates(out var scanError);
+        if (scanError != null) panel.Children.Add(Secondary(scanError));
         var clinicOptions = _storage.Data.Locais.Select(x => x.Nome).Concat(templates.Select(x => x.Clinic))
             .Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x).ToArray();
         var location = new ComboBox { ItemsSource = clinicOptions, SelectedIndex = clinicOptions.Length == 0 ? -1 : 0 };
@@ -109,6 +110,7 @@ public partial class MainWindow : Window
         var match = new ComboBox { Visibility = Visibility.Collapsed, DisplayMemberPath = "Display" };
         var fields = Column();
         var fieldEditors = new Dictionary<string, TextBox>();
+        var fieldDefaults = new Dictionary<string, string>();
         var locationCard = Column();
         locationCard.Children.Add(Text("Local de atendimento")); locationCard.Children.Add(location);
         locationCard.Children.Add(Text("Tipo de documento")); locationCard.Children.Add(category);
@@ -124,11 +126,12 @@ public partial class MainWindow : Window
         bottom.Children.Add(Text("Quantidade de cópias")); bottom.Children.Add(copies);
         var actions = new WrapPanel();
         var generate = new Button { Content = "Gerar documento" };
-        var next = ActionButton("Próximo paciente", () => { name.Clear(); model.SelectedIndex = -1; fields.Children.Clear(); fieldEditors.Clear(); });
+        void ClearFields() { fields.Children.Clear(); fieldEditors.Clear(); fieldDefaults.Clear(); }
+        var next = ActionButton("Próximo paciente", () => { name.Clear(); model.SelectedIndex = -1; ClearFields(); });
         void RefreshTemplates()
         {
             var clin = location.SelectedItem as string;
-            var items = templates.Where(x => x.Clinic == clin).ToArray();
+            var items = templates.Where(x => x.AppliesTo(clin)).ToArray();
             category.ItemsSource = items.Select(x => x.Category).Distinct().OrderBy(x => x).ToArray();
             category.SelectedIndex = category.Items.Count > 0 ? 0 : -1;
         }
@@ -136,9 +139,9 @@ public partial class MainWindow : Window
         {
             var clin = location.SelectedItem as string;
             var cat = category.SelectedItem as string;
-            model.ItemsSource = templates.Where(x => x.Clinic == clin && x.Category == cat).ToArray();
+            model.ItemsSource = templates.Where(x => x.AppliesTo(clin) && x.Category == cat).ToArray();
             model.SelectedIndex = -1;
-            fields.Children.Clear(); fieldEditors.Clear();
+            ClearFields();
         }
         void RefreshPatient()
         {
@@ -147,28 +150,38 @@ public partial class MainWindow : Window
             match.ItemsSource = candidates;
             match.Visibility = candidates.Length > 1 ? Visibility.Visible : Visibility.Collapsed;
             match.SelectedIndex = -1;
-            RefreshFields();
+            RefreshFields(keepTyped: true);
         }
         Patient? PatientSelected()
         {
             if (match.Visibility == Visibility.Visible) return (match.SelectedItem as PatientChoice)?.Patient;
             return _storage.Data.Pacientes.FirstOrDefault(x => x.Nome.Equals(name.Text.Trim(), StringComparison.OrdinalIgnoreCase));
         }
-        void RefreshFields()
+        // keepTyped: ao trocar/corrigir o paciente, o que já foi digitado nos campos (CID, conduta…) é mantido;
+        // só os valores que ainda são os automáticos do cadastro anterior são recalculados.
+        void RefreshFields(bool keepTyped = false)
         {
-            fields.Children.Clear(); fieldEditors.Clear();
+            var typed = keepTyped
+                ? fieldEditors.Where(kv => kv.Value.Text != fieldDefaults.GetValueOrDefault(kv.Key, "")).ToDictionary(kv => kv.Key, kv => kv.Value.Text)
+                : [];
+            ClearFields();
             if (model.SelectedItem is not TemplateInfo template) return;
             IReadOnlyList<string> names;
             try { names = DocxService.Fields(template.FullPath); }
             catch (Exception ex) { fields.Children.Add(Secondary("Não foi possível ler o modelo: " + ex.Message)); return; }
-            var clinicData = _storage.Data.Locais.FirstOrDefault(x => x.Nome == location.SelectedItem as string);
+            var clinicData = FindClinic(location.SelectedItem as string);
             var defaults = ClinicalFields.Defaults(names, PatientSelected(), clinicData, DateTimeOffset.Now);
             foreach (var field in names.Where(x => !ClinicalFields.IsPatientName(x)))
             {
                 fields.Children.Add(Text(field));
-                var input = Input(defaults.GetValueOrDefault(field, ""));
-                if (field.Contains("DIAGNOSTICO", StringComparison.OrdinalIgnoreCase) || field.Contains("CONDUTA", StringComparison.OrdinalIgnoreCase))
-                    input.Height = 82;
+                fieldDefaults[field] = defaults.GetValueOrDefault(field, "");
+                var input = Input(typed.TryGetValue(field, out var kept) ? kept : fieldDefaults[field]);
+                var key = ClinicalFields.Key(field);
+                if (key.Contains("DIAGNOSTICO") || key.Contains("CONDUTA") || key.Contains("OBSERVAC") || key.Contains("HISTORIA"))
+                {
+                    input.Height = 82; input.AcceptsReturn = true; input.TextWrapping = TextWrapping.Wrap;
+                    input.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+                }
                 fieldEditors[field] = input;
                 fields.Children.Add(input);
             }
@@ -189,14 +202,16 @@ public partial class MainWindow : Window
                     throw new InvalidOperationException("Existem pacientes homônimos. Selecione o cadastro pela data de nascimento/CPF.");
                 var patient = PatientSelected();
                 var modelFields = DocxService.Fields(template.FullPath);
-                var clinicData = _storage.Data.Locais.FirstOrDefault(x => x.Nome == template.Clinic);
+                // Modelos de pastas compartilhadas não têm local próprio: vale o local escolhido.
+                var clinicName = location.SelectedItem as string ?? template.ClinicLabel;
+                var clinicData = FindClinic(clinicName);
                 var values = ClinicalFields.Defaults(modelFields, patient, clinicData, DateTimeOffset.Now);
                 foreach (var kv in fieldEditors) values[kv.Key] = kv.Value.Text;
                 foreach (var f in modelFields.Where(ClinicalFields.IsPatientName)) values[f] = name.Text.Trim();
                 var root = string.IsNullOrWhiteSpace(_storage.Data.PastaDocumentos)
                     ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Orthck")
                     : _storage.Data.PastaDocumentos;
-                var path = PathRules.NewDocumentPath(root, template.Clinic, template.Category, template.DisplayName, name.Text.Trim(), DateTime.Now);
+                var path = PathRules.NewDocumentPath(root, clinicName, template.Category, template.DisplayName, name.Text.Trim(), DateTime.Now);
                 DocxService.Fill(template.FullPath, path, values);
                 if (patient == null)
                 {
@@ -205,16 +220,21 @@ public partial class MainWindow : Window
                 }
                 ClinicalFields.UpdatePermanentFields(patient, values);
                 var doc = new GeneratedDocument { Modelo = template.DisplayName, Paciente = patient.Nome, PacienteID = patient.Id,
-                    Local = template.Clinic, Caminho = path };
+                    Local = clinicName, Caminho = path };
                 _storage.Data.Historico.Insert(0, doc);
                 _storage.Save();
+                var outcome = "Somente salvo.";
                 if (mode.SelectedIndex <= 1)
                 {
                     var item = _queue.Add(doc, (int)(copies.SelectedItem ?? 1));
-                    if (mode.SelectedIndex == 1) await _queue.SubmitAsync([item.Id], null);
+                    outcome = "Adicionado à fila.";
+                    if (mode.SelectedIndex == 1)
+                        outcome = await _queue.SubmitAsync([item.Id], null)
+                            ? $"Impressão: {item.Situacao}. {item.Observacao}"
+                            : "A fila já está imprimindo; o documento ficou pendente na fila.";
                 }
-                MessageBox.Show($"Documento salvo:\n{path}\n\n{(mode.SelectedIndex == 0 ? "Adicionado à fila." : mode.SelectedIndex == 1 ? "Enviado para processamento da impressão." : "Somente salvo.")}", "Orthck");
-                name.Clear(); model.SelectedIndex = -1; fields.Children.Clear(); fieldEditors.Clear();
+                MessageBox.Show($"Documento salvo:\n{path}\n\n{outcome}", "Orthck");
+                name.Clear(); model.SelectedIndex = -1; ClearFields();
             }
             catch (Exception ex) { MessageBox.Show(ex.Message, "Orthck — Gerar documento", MessageBoxButton.OK, MessageBoxImage.Warning); }
         };
@@ -224,10 +244,14 @@ public partial class MainWindow : Window
         return Scroll(panel);
     }
     private sealed record PatientChoice(Patient Patient, string Display);
-    private IReadOnlyList<TemplateInfo> DiscoverTemplates()
+    private ClinicLocation? FindClinic(string? name) => _storage.Data.Locais.FirstOrDefault(x => TemplateCatalog.SameName(x.Nome, name));
+    private IReadOnlyList<TemplateInfo> DiscoverTemplates(out string? error)
     {
+        error = null;
         var root = _storage.Data.PastaSincronizada;
-        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) return [];
-        try { return TemplateCatalog.Scan(root); } catch { return []; }
+        if (string.IsNullOrWhiteSpace(root)) return [];
+        if (!Directory.Exists(root)) { error = $"Pasta de modelos indisponível: {root}. Nenhum modelo foi removido; reconecte a pasta ou escolha outra em Modelos."; return []; }
+        try { return TemplateCatalog.Scan(root, _storage.Data.PastasIgnoradas, _storage.Data.PastasCompartilhadas); }
+        catch (Exception ex) { error = "Não foi possível ler a pasta de modelos: " + ex.Message; return []; }
     }
 }

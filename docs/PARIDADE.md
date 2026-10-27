@@ -10,7 +10,7 @@ Esta matriz diferencia **código implementado**, **paridade completa** e **teste
 | Campos de consulta (CID, conduta, afastamento) | Isolados por documento | Expandir testes de trocas parciais |
 | Cadastro de pacientes/homônimos | Básico funcional | Mesclar cadastros, validar CPF/data, melhoria da busca |
 | Locais de atendimento | Cadastro básico | Transferência segura de vínculos e preferências por local |
-| Modelos e subpastas | Descoberta recursiva | Atalhos, aliases, tipos locais, sincronização bidirecional e remoção segura |
+| Modelos e subpastas | Descoberta recursiva; pastas compartilhadas (`1 - APAC`) e ignoradas como no Mac | Atalhos (.lnk), arquivos soltos na pasta do local, .doc/.rtf/.odt, tipos locais, sincronização bidirecional e remoção segura |
 | Histórico | Lista, abrir e colocar na fila | Filtros por paciente/local, reimpressão avançada |
 | Fila de impressão | Persistente, sequencial, seleção e reenvio confirmado | Testar diferentes impressoras/versões do Word |
 | Impressão pelo Word | COM por documento | Homologação em impressoras reais e validação de cópias |

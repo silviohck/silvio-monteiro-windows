@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Orthck.Core;
 
@@ -9,7 +11,8 @@ public sealed class Storage
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true,
-        WriteIndented = true
+        WriteIndented = true,
+        Converters = { new Iso8601DateConverter() }
     };
     public string DirectoryPath { get; }
     public string FilePath => Path.Combine(DirectoryPath, "dados.json");
@@ -20,8 +23,13 @@ public sealed class Storage
         DirectoryPath = directoryPath ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Orthck");
         Directory.CreateDirectory(DirectoryPath);
         Data = Load(FilePath);
-        // Em caso de interrupção entre disparo e confirmação não reenviar automaticamente.
-        foreach (var item in Data.FilaImpressao.Where(x => x.Situacao == "enviando"))
+        MarkInterruptedPrints(Data);
+    }
+
+    /// <summary>Em caso de interrupção entre disparo e confirmação não reenviar automaticamente.</summary>
+    private static void MarkInterruptedPrints(AppData data)
+    {
+        foreach (var item in data.FilaImpressao.Where(x => x.Situacao == "enviando"))
         {
             item.Situacao = "incerto";
             item.Observacao = "Aplicativo interrompido durante envio: confira a impressora antes de reenviar.";
@@ -47,6 +55,10 @@ public sealed class Storage
     {
         // A importação preserva integralmente a fonte e o estado anterior do Windows.
         var incoming = Load(source);
+        MarkInterruptedPrints(incoming);
+        // Caminhos do Mac (/Users/…) no Windows apontariam para pastas inexistentes na unidade atual.
+        if (incoming.PastaSincronizada.StartsWith('/')) incoming.PastaSincronizada = "";
+        if (incoming.PastaDocumentos.StartsWith('/')) incoming.PastaDocumentos = "";
         SaveSnapshot(Data, backupName: "antes-importacao");
         Data = incoming;
         Save();
@@ -78,4 +90,16 @@ public sealed class Storage
         }
         finally { if (File.Exists(tmp)) File.Delete(tmp); }
     }
+}
+
+/// <summary>
+/// Mesmo formato do Mac (JSONEncoder .iso8601): UTC, sem frações de segundo. O decodificador do Mac
+/// rejeita frações; na leitura, a hora é convertida para o fuso local para exibição correta.
+/// </summary>
+internal sealed class Iso8601DateConverter : JsonConverter<DateTimeOffset>
+{
+    public override DateTimeOffset Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        reader.GetDateTimeOffset().ToLocalTime();
+    public override void Write(Utf8JsonWriter writer, DateTimeOffset value, JsonSerializerOptions options) =>
+        writer.WriteStringValue(value.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture));
 }

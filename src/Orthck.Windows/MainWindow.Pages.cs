@@ -109,10 +109,11 @@ public partial class MainWindow
         }));
         panel.Children.Add(row);
         panel.Children.Add(Secondary("Destino dos documentos: " + (string.IsNullOrWhiteSpace(_storage.Data.PastaDocumentos) ? "Documentos\\Orthck" : _storage.Data.PastaDocumentos)));
-        var templates = DiscoverTemplates();
+        var templates = DiscoverTemplates(out var scanError);
         panel.Children.Add(Text($"Modelos encontrados: {templates.Count}", 17));
+        if (scanError != null) panel.Children.Add(Secondary(scanError));
         var grid = new DataGrid { AutoGenerateColumns = false, IsReadOnly = true, Height = 350 };
-        grid.Columns.Add(new DataGridTextColumn { Header = "Local", Binding = new System.Windows.Data.Binding("Clinic"), Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
+        grid.Columns.Add(new DataGridTextColumn { Header = "Local", Binding = new System.Windows.Data.Binding("ClinicLabel"), Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
         grid.Columns.Add(new DataGridTextColumn { Header = "Tipo", Binding = new System.Windows.Data.Binding("Category"), Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
         grid.Columns.Add(new DataGridTextColumn { Header = "Subpasta", Binding = new System.Windows.Data.Binding("Subpath"), Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
         grid.Columns.Add(new DataGridTextColumn { Header = "Modelo", Binding = new System.Windows.Data.Binding("DisplayName"), Width = new DataGridLength(2, DataGridLengthUnitType.Star) });
@@ -120,13 +121,17 @@ public partial class MainWindow
         panel.Children.Add(grid);
         var controls = new WrapPanel();
         controls.Children.Add(ActionButton("Abrir modelo no Word", () => { if (grid.SelectedItem is TemplateInfo t) OpenDocument(t.FullPath); }));
-        controls.Children.Add(ActionButton("Importar arquivo DOCX…", () =>
+        // O destino da importação é escolhido pelo usuário, não o primeiro local cadastrado.
+        var importClinics = _storage.Data.Locais.Select(x => x.Nome).Concat(templates.Select(x => x.Clinic))
+            .Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x).ToArray();
+        var importClinic = new ComboBox { ItemsSource = importClinics, SelectedIndex = importClinics.Length == 0 ? -1 : 0, MinWidth = 220, VerticalAlignment = VerticalAlignment.Center };
+        controls.Children.Add(ActionButton("Importar arquivo DOCX para:", () =>
         {
             if (string.IsNullOrWhiteSpace(_storage.Data.PastaSincronizada) || !Directory.Exists(_storage.Data.PastaSincronizada))
                 throw new InvalidOperationException("Primeiro escolha a pasta principal de modelos.");
+            if (importClinic.SelectedItem is not string clinic) throw new InvalidOperationException("Cadastre ou escolha o local que receberá o modelo.");
             var dialog = new Microsoft.Win32.OpenFileDialog { Filter = "Documentos Word (*.docx)|*.docx" };
             if (dialog.ShowDialog() != true) return;
-            var clinic = _storage.Data.Locais.FirstOrDefault()?.Nome ?? "Todos os locais";
             var dir = Path.Combine(_storage.Data.PastaSincronizada, PathRules.SafeComponent(clinic), "Outros");
             Directory.CreateDirectory(dir);
             var dest = Path.Combine(dir, Path.GetFileName(dialog.FileName));
@@ -135,6 +140,7 @@ public partial class MainWindow
             File.Copy(dialog.FileName, dest);
             ShowPage(4);
         }));
+        controls.Children.Add(importClinic);
         panel.Children.Add(controls);
         return Scroll(panel);
     }
@@ -155,6 +161,11 @@ public partial class MainWindow
         {
             if (grid.SelectedItem is not GeneratedDocument d) return;
             if (!File.Exists(d.Caminho)) throw new FileNotFoundException("Documento original não encontrado.", d.Caminho);
+            var queued = _storage.Data.FilaImpressao.FirstOrDefault(x => x.DocumentoID == d.Id && x.Situacao != "enviado");
+            if (queued != null) { MessageBox.Show($"Este documento já está na fila (situação: {queued.Situacao})."); return; }
+            if (_storage.Data.FilaImpressao.Any(x => x.DocumentoID == d.Id && x.Situacao == "enviado") &&
+                MessageBox.Show("Este documento já foi enviado ao Word. Colocar novamente na fila para reimprimir?", "Reimpressão",
+                    MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
             _queue.Add(d, 1); MessageBox.Show("Documento incluído na fila de impressão.");
         }));
         row.Children.Add(ActionButton("Remover do histórico", () =>
@@ -205,9 +216,14 @@ public partial class MainWindow
     private async Task RunPrinting(Guid[] ids, string? printer)
     {
         if (ids.Length == 0) { MessageBox.Show("Não há documentos pendentes selecionados."); return; }
-        try { await _queue.SubmitAsync(ids, printer); }
+        try
+        {
+            if (!await _queue.SubmitAsync(ids, printer))
+                MessageBox.Show("A fila já está imprimindo. Aguarde o fim da rodada atual.", "Fila de impressão");
+        }
         catch (Exception ex) { MessageBox.Show(ex.Message, "Fila de impressão", MessageBoxButton.OK, MessageBoxImage.Warning); }
-        finally { ShowPage(1); }
+        // Não trocar a página: o usuário pode ter ido a outra tela durante a impressão (o evento Changed atualiza a fila).
+        finally { if (Navigation.SelectedIndex == 1) ShowPage(1); }
     }
 
     private FrameworkElement CodePage(string title, string fileName)

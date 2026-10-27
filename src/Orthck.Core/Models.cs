@@ -13,6 +13,8 @@ public sealed class AppData
     public List<PrintItem> FilaImpressao { get; set; } = [];
     public string PastaSincronizada { get; set; } = "";
     public List<string> PastasIgnoradas { get; set; } = [];
+    /// <summary>Subpastas principais que valem para todos os locais (padrão do Mac: "1 - APAC").</summary>
+    public List<string> PastasCompartilhadas { get; set; } = ["1 - APAC"];
     public string PastaDocumentos { get; set; } = "";
     [JsonExtensionData] public Dictionary<string, JsonElement>? Outros { get; set; }
 }
