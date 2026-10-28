@@ -38,3 +38,14 @@ Branch: `claude/eloquent-gates-s1hfgt`. Inclui compatibilidade de datas ISO-8601
 6. **Erros irreversíveis após gravar DOCX:** um arquivo Word salvo e um erro posterior no JSON podem deixar um documento fora do histórico. Planejar operação de reconciliação/verificação de arquivos não registrados.
 
 **Não usar o projeto como sistema clínico de produção antes da homologação real.**
+
+## 28/10/2026 — Reescrita espelhando o Mac (PR #6)
+
+O proprietário relatou que a versão Windows estava "praticamente não utilizável". O núcleo e a interface foram reescritos a partir do código do Mac, mantendo os invariantes deste repositório:
+- Fila: incerto interrompe o lote, uma sessão do Word por vez, nada é reenviado sem confirmação.
+- Atendimento: campos do atendimento recomeçam ao trocar nome, homônimo, modelo, subpasta ou local.
+- Dados: gravação atômica, backup diário, `dados.json` ilegível nunca é sobrescrito, importação não zera dados.
+- Pasta sincronizada: nunca remove modelos quando a pasta está indisponível ou vazia.
+- 46 testes de regressão; o CI abre todas as telas e falha se alguma der erro.
+- Riscos remanescentes: impressão e conversão pelo Word real, atalhos `.lnk` e pastas de rede/OneDrive ainda sem teste no Windows físico.
+
