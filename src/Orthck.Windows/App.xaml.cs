@@ -12,8 +12,13 @@ public partial class App : Application
     {
         base.OnStartup(e);
         // Um erro inesperado numa tela não pode fechar o app no meio de um atendimento.
+        // Erros fora da tela (tarefas em segundo plano) vão para o registro em vez de sumir ou fechar o app.
+        TaskScheduler.UnobservedTaskException += (_, args) => { Registro.Erro("tarefa", args.Exception); args.SetObserved(); };
+        AppDomain.CurrentDomain.UnhandledException += (_, args) => { if (args.ExceptionObject is Exception ex) Registro.Erro("fatal", ex); };
         DispatcherUnhandledException += (_, args) =>
         {
+            Registro.Erro("tela", args.Exception);
+            if (Capturas.Ativo) return; // no CI, o modo de capturas registra o erro e segue
             MessageBox.Show($"Ocorreu um erro inesperado. Os dados já salvos foram preservados.\n\n{args.Exception.Message}",
                 "Orthck", MessageBoxButton.OK, MessageBoxImage.Error);
             args.Handled = true;

@@ -46,10 +46,11 @@ public sealed class PacientesView : UserControl
         var termo = _busca.Text.Trim();
         var pacientes = Arm.PacientesOrdenados.Where(p => termo.Length == 0 || Texto.Contem(p.Nome, termo) || p.Cpf.Contains(termo)).ToList();
         var filtro = Ajustes.Atual.FiltroLocalPacientes;
+        var locaisPorPaciente = Arm.LocaisPorPaciente();
         foreach (var local in Arm.LocaisOrdenados.Where(l => filtro.Length == 0 || filtro == l.Id.ToString()))
         {
             // Pacientes do local e os de outros locais que já foram atendidos aqui.
-            var doLocal = pacientes.Where(p => p.LocalId == local.Id || Arm.LocaisDoPaciente(p).Any(l => l.Id == local.Id)).ToList();
+            var doLocal = pacientes.Where(p => p.LocalId == local.Id || (locaisPorPaciente.TryGetValue(p.Id, out var ids) && ids.Contains(local.Id))).ToList();
             if (doLocal.Count == 0) continue;
             _tela.AdicionarGrupo($"{(local.Nome.Length == 0 ? "Local sem nome" : local.Nome)} ({doLocal.Count})");
             foreach (var p in doLocal) _tela.AdicionarItem(Linha(p), p.Id);

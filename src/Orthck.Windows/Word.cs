@@ -20,8 +20,8 @@ public sealed class Word : IImpressoraWord, IConversorDocumentos
     {
         if (!Instalado)
             return new ResultadoImpressao(DesfechoImpressao.Falhou, "Para imprimir pelo app é preciso ter o Microsoft Word (desktop) instalado.");
-        if (!await UmaSessao.WaitAsync(0, ct))
-            return new ResultadoImpressao(DesfechoImpressao.Incerto, "Outra impressão do Word ainda está em andamento ou sem resposta. Nada novo foi enviado.");
+        if (!await UmaSessao.WaitAsync(TimeSpan.FromMinutes(2), ct))
+            return new ResultadoImpressao(DesfechoImpressao.Falhou, "O Word está ocupado com outra tarefa (ou sem resposta desde a última impressão). Nada foi enviado; tente de novo em instantes.");
         var concluido = new TaskCompletionSource<ResultadoImpressao>(TaskCreationOptions.RunContinuationsAsynchronously);
         var thread = new Thread(() =>
         {

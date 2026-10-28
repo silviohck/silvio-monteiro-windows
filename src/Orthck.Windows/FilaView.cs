@@ -72,11 +72,11 @@ public sealed class FilaView : UserControl
         if (enviados > 0) partes.Add(Texto.Plural(enviados, "enviado", "enviados"));
         p.Add(Ui.Texto(string.Join(" · ", partes) + $" — imprime em: {JanelaPrincipal.NomeDaImpressora} (troque na barra lateral)", Estilo.Apoio));
 
-        var todos = Ui.Botao($"Imprimir todos ({pendentes.Count})", () => _ = Imprimir(pendentes.Select(x => x.Id).ToHashSet()), principal: true, glifo: Ui.GImpressora);
+        var todos = Ui.Botao($"Imprimir todos ({pendentes.Count})", () => Ui.ExecutarAsync(() => Imprimir(pendentes.Select(x => x.Id).ToHashSet())), principal: true, glifo: Ui.GImpressora);
         todos.IsEnabled = pendentes.Count > 0 && !Arm.ProcessandoFila;
         todos.Padding = new Thickness(16, 9, 16, 9);
         var marcadosPendentes = pendentes.Where(x => _marcados.Contains(x.Id)).Select(x => x.Id).ToHashSet();
-        var marcados = Ui.Botao($"Imprimir marcados ({marcadosPendentes.Count})", () => _ = Imprimir(marcadosPendentes));
+        var marcados = Ui.Botao($"Imprimir marcados ({marcadosPendentes.Count})", () => Ui.ExecutarAsync(() => Imprimir(marcadosPendentes)));
         marcados.IsEnabled = marcadosPendentes.Count > 0 && !Arm.ProcessandoFila;
         marcados.Padding = new Thickness(16, 9, 16, 9);
         var esquerda = Ui.Linha(10, todos, marcados);
@@ -154,7 +154,7 @@ public sealed class FilaView : UserControl
     private void Reenviar(ItemFilaImpressao item)
     {
         if (!Ui.Confirmar("Reenviar este documento?", $"Confira antes se {item.Modelo} — {item.Paciente} já foi impresso. Reenviar pode produzir cópias duplicadas.", true)) return;
-        if (Arm.Reenfileirar(item.Id)) _ = Imprimir([item.Id]);
+        if (Arm.Reenfileirar(item.Id)) Ui.ExecutarAsync(() => Imprimir([item.Id]));
     }
 
     private async Task Imprimir(HashSet<Guid> ids)
@@ -230,7 +230,7 @@ public sealed class HistoricoView : UserControl
         var abrir = Ui.Botao("Abrir", () => Ui.Abrir(documento.Caminho)); abrir.IsEnabled = existe;
         var pasta = Ui.BotaoIcone(Ui.GPastaAberta, "Mostrar no Explorador", () => Ui.MostrarNaPasta(documento.Caminho), Tema.Destaque); pasta.IsEnabled = existe;
         var copias = Arm.Modelo(documento.ModeloId)?.Copias ?? 1;
-        var imprimir = Ui.Botao(_imprimindo == documento.Id ? "Imprimindo…" : "Imprimir", () => _ = Imprimir(documento, copias));
+        var imprimir = Ui.Botao(_imprimindo == documento.Id ? "Imprimindo…" : "Imprimir", () => Ui.ExecutarAsync(() => Imprimir(documento, copias)));
         imprimir.IsEnabled = existe && _imprimindo == null && !Arm.ProcessandoFila;
         var naFila = Arm.Dados.FilaImpressao.Any(x => x.DocumentoId == documento.Id && x.Situacao == SituacaoImpressao.Pendente);
         var porNaFila = Ui.Botao(naFila ? "Na fila" : "Pôr na fila", () =>
