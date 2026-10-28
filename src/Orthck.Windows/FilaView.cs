@@ -148,7 +148,6 @@ public sealed class FilaView : UserControl
         direita.Margin = new Thickness(12, 0, 0, 0);
         linha.Children.Add(inicio); linha.Children.Add(direita); linha.Children.Add(textos);
         var cartao = Ui.Cartao(linha, Tema.Superficie, 10, 12);
-        cartao.Opacity = pendente || item.Situacao == SituacaoImpressao.Enviando ? 1 : 0.8;
         return cartao;
     }
 

@@ -22,17 +22,17 @@ public static class Tema
     private static readonly Dictionary<string, (string Claro, string Escuro)> Cores = new()
     {
         [Destaque] = ("#30616E", "#94C7CC"),
-        [Sucesso] = ("#3B7059", "#96C7A6"),
-        [Aviso] = ("#A65A12", "#E8A35E"),
+        [Sucesso] = ("#2E5C47", "#A8D6B6"),
+        [Aviso] = ("#8C4A0B", "#F0B070"),
         [Fundo] = ("#F6F8F9", "#1C2024"),
         [Lateral] = ("#EEF1F4", "#25292D"),
         [Superficie] = ("#FDFEFE", "#2D3135"),
         [Borda] = ("#D8E1E5", "#494F55"),
         [DestaqueSuave] = ("#E8F1F2", "#2F484D"),
-        [SucessoSuave] = ("#E6F0EA", "#2C4237"),
-        [AvisoSuave] = ("#FBEFE3", "#4A3726"),
+        [SucessoSuave] = ("#E8F2EC", "#233A2E"),
+        [AvisoSuave] = ("#FCF1E6", "#3D2C1D"),
         [TextoPrincipal] = ("#1F2A2E", "#E6ECEE"),
-        [TextoSecundario] = ("#5C686D", "#A3AEB3"),
+        [TextoSecundario] = ("#4E5A5F", "#B3BDC2"),
         [TextoNoDestaque] = ("#FDFEFE", "#16292D"),
     };
 

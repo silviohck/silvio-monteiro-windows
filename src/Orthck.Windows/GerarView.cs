@@ -280,12 +280,15 @@ public sealed class GerarView : UserControl
 
     private Button BotaoProximo()
     {
-        var b = Ui.Botao("Próximo paciente", ProximoPaciente, principal: true, glifo: Ui.GVoltar,
-            dica: "Recomeça do início para o próximo paciente (Ctrl+Shift+N). Só o local de atendimento continua.");
-        b.SetResourceReference(Control.BackgroundProperty, Tema.Sucesso);
-        b.SetResourceReference(Control.ForegroundProperty, Tema.TextoNoDestaque);
-        b.SetResourceReference(Control.BorderBrushProperty, Tema.Sucesso);
-        b.VerticalAlignment = VerticalAlignment.Center;
+        // Botão comum (fundo claro, texto escuro) com o ícone verde: legível em qualquer tema.
+        var conteudo = new StackPanel { Orientation = Orientation.Horizontal };
+        var icone = Ui.Icone(Ui.GVoltar, 14, Tema.Sucesso);
+        icone.Margin = new Thickness(0, 1, 8, 0);
+        conteudo.Children.Add(icone);
+        conteudo.Children.Add(new TextBlock { Text = "Próximo paciente", VerticalAlignment = VerticalAlignment.Center, FontWeight = FontWeights.SemiBold });
+        var b = new Button { Content = conteudo, Padding = new Thickness(14, 7, 14, 7), MinHeight = 34, VerticalAlignment = VerticalAlignment.Center,
+            ToolTip = "Recomeça do início para o próximo paciente (Ctrl+Shift+N). Só o local de atendimento continua." };
+        b.Click += (_, _) => Ui.Executar(ProximoPaciente);
         return b;
     }
 
@@ -652,7 +655,6 @@ public sealed class GerarView : UserControl
             : NomeDigitado.Length == 0 ? "Digite o nome do paciente" : "Gerar o documento (Enter)";
         ToolTipService.SetShowOnDisabled(gerar, true);
         var proximo = BotaoProximo();
-        proximo.Opacity = _ultimoDocumento == null ? 0.6 : 1;
         proximo.Padding = new Thickness(16, 9, 16, 9);
         var direita = Ui.Linha(10, proximo, gerar);
         corpo.Add(Ui.Divisor());
