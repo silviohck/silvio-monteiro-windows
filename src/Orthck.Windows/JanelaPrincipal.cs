@@ -13,7 +13,7 @@ public sealed class JanelaPrincipal : Window
 {
     public Armazenamento Arm { get; }
     public Word Word { get; }
-    private readonly ListBox _navegacao = new() { BorderThickness = new Thickness(0), Background = System.Windows.Media.Brushes.Transparent };
+    private readonly ListBox _navegacao = new() { BorderThickness = new Thickness(0), Background = System.Windows.Media.Brushes.Transparent, ItemContainerStyle = Ui.ItemDeLista() };
     private readonly ContentControl _tela = new();
     private readonly StackPanel _rodapeLateral = Ui.Coluna(14);
     private TextBlock? _contagemFila;

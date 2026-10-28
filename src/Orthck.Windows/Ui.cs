@@ -272,6 +272,40 @@ public static class Ui
         return s;
     }
 
+    private static Style? _itemDeLista;
+
+    /// <summary>Itens de lista com seleção no tom suave do Orthck (o Fluent usaria o azul do Windows).</summary>
+    public static Style ItemDeLista()
+    {
+        if (_itemDeLista != null) return _itemDeLista;
+        var borda = new FrameworkElementFactory(typeof(Border)) { Name = "fundo" };
+        borda.SetValue(Border.CornerRadiusProperty, new CornerRadius(7));
+        borda.SetValue(Border.PaddingProperty, new TemplateBindingExtension(Control.PaddingProperty));
+        borda.SetValue(Border.BackgroundProperty, Brushes.Transparent);
+        borda.SetValue(FrameworkElement.MarginProperty, new Thickness(0, 1, 0, 1));
+        var conteudo = new FrameworkElementFactory(typeof(ContentPresenter));
+        conteudo.SetValue(FrameworkElement.HorizontalAlignmentProperty, new TemplateBindingExtension(Control.HorizontalContentAlignmentProperty));
+        conteudo.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+        borda.AppendChild(conteudo);
+        var modelo = new ControlTemplate(typeof(ListBoxItem)) { VisualTree = borda };
+        var passando = new MultiTrigger();
+        passando.Conditions.Add(new Condition(UIElement.IsMouseOverProperty, true));
+        passando.Conditions.Add(new Condition(UIElement.IsEnabledProperty, true));
+        passando.Setters.Add(new Setter(Border.BackgroundProperty, new DynamicResourceExtension(Tema.Borda), "fundo"));
+        modelo.Triggers.Add(passando);
+        var selecionado = new Trigger { Property = ListBoxItem.IsSelectedProperty, Value = true };
+        selecionado.Setters.Add(new Setter(Border.BackgroundProperty, new DynamicResourceExtension(Tema.DestaqueSuave), "fundo"));
+        modelo.Triggers.Add(selecionado);
+        var estilo = new Style(typeof(ListBoxItem));
+        estilo.Setters.Add(new Setter(Control.TemplateProperty, modelo));
+        estilo.Setters.Add(new Setter(FrameworkElement.FocusVisualStyleProperty, null));
+        estilo.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty, HorizontalAlignment.Stretch));
+        estilo.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(10, 6, 10, 6)));
+        estilo.Setters.Add(new Setter(Control.BackgroundProperty, Brushes.Transparent));
+        _itemDeLista = estilo;
+        return estilo;
+    }
+
     // MARK: Ações e mensagens
 
     /// <summary>Executa mostrando a mensagem de erro em vez de fechar o app.</summary>

@@ -76,9 +76,11 @@ public static class Tema
     private static void TrocarCoresDeDestaque(ResourceDictionary dicionario, Color destaque, Color textoNoDestaque, int nivel)
     {
         if (nivel > 6) return;
-        foreach (var chave in dicionario.Keys.OfType<string>().Where(k => k.Contains("Accent", StringComparison.Ordinal)).ToList())
+        // Cores "desativado" ficam como as do Windows; textos sobre o destaque (Foreground, TextOnAccent) ficam claros.
+        foreach (var chave in dicionario.Keys.OfType<string>()
+                     .Where(k => k.Contains("Accent", StringComparison.Ordinal) && !k.Contains("Disabled", StringComparison.Ordinal)).ToList())
         {
-            var noDestaque = chave.Contains("TextOnAccent", StringComparison.Ordinal);
+            var noDestaque = chave.Contains("TextOnAccent", StringComparison.Ordinal) || chave.Contains("Foreground", StringComparison.Ordinal);
             var cor = noDestaque ? textoNoDestaque : destaque;
             // Uma cor que não puder ser trocada fica como a do Windows; nunca impede o app de abrir.
             try

@@ -274,7 +274,7 @@ public sealed class TabelaCodigosView : UserControl
     private readonly TabelaDeCodigos _tabela;
     private readonly string _chave;
     private readonly TextBox _busca;
-    private readonly ListBox _lista = new() { BorderThickness = new Thickness(0), Background = System.Windows.Media.Brushes.Transparent };
+    private readonly ListBox _lista = new() { BorderThickness = new Thickness(0), Background = System.Windows.Media.Brushes.Transparent, ItemContainerStyle = Ui.ItemDeLista() };
     private readonly TextBlock _contagem = Ui.Texto("", Estilo.Legenda);
     private readonly ContentControl _copiado = new();
     private readonly bool _recuar;

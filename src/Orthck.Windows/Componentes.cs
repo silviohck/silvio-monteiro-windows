@@ -59,7 +59,7 @@ public sealed class ListaDetalhe : Grid
 {
     private readonly ContentControl _detalhe = new();
     public StackPanel Topo { get; } = Ui.Coluna(8);
-    public ListBox Lista { get; } = new() { BorderThickness = new Thickness(0), Background = System.Windows.Media.Brushes.Transparent };
+    public ListBox Lista { get; } = new() { BorderThickness = new Thickness(0), Background = System.Windows.Media.Brushes.Transparent, ItemContainerStyle = Ui.ItemDeLista() };
 
     public ListaDetalhe(double larguraDaLista = 310)
     {
