@@ -74,15 +74,6 @@ public sealed class AjustesJanela : Dialogo
 
     private void ImportarDoMac()
     {
-        var dialogo = new Microsoft.Win32.OpenFileDialog { Title = "Escolha o dados.json do Orthck para Mac", Filter = "Dados do Orthck (dados.json)|dados.json|JSON (*.json)|*.json" };
-        if (dialogo.ShowDialog(this) != true) return;
-        if (!Ui.Confirmar("Importar os dados do Mac?", "Os cadastros, histórico, fila e configurações deste computador serão substituídos pelos do Mac. Uma cópia dos dados atuais fica guardada em Backups.", true)) return;
-        try
-        {
-            var resumo = _janela.Arm.ImportarDadosDoMac(dialogo.FileName);
-            _janela.Recarregar();
-            Ui.Informar($"Dados importados: {resumo}");
-        }
-        catch (Exception ex) { Ui.Erro(ex.Message); }
+        if (_janela.ImportarDados()) Close();
     }
 }

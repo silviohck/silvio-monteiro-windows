@@ -28,6 +28,7 @@ public sealed class Word : IImpressoraWord, IConversorDocumentos
             object? wordObj = null, docObj = null;
             string? impressoraAnterior = null;
             var wordDoUsuario = false;
+            var enviando = false;
             var resultado = new ResultadoImpressao(DesfechoImpressao.Incerto, "Não foi possível confirmar o término do envio.");
             try
             {
@@ -38,15 +39,27 @@ public sealed class Word : IImpressoraWord, IConversorDocumentos
                 // Se o COM devolver o Word que o usuário já tem aberto, não escondê-lo nem fechá-lo.
                 wordDoUsuario = word.Documents.Count > 0;
                 if (!wordDoUsuario) { word.Visible = false; word.DisplayAlerts = 0; }
+                // O documento precisa de uma janela ativa para trocar a impressora e imprimir ("uma janela de documento
+                // não está ativa"); com o Word oculto, a janela também fica oculta.
+                docObj = word.Documents.Open(arquivo, ConfirmConversions: false, ReadOnly: true, AddToRecentFiles: false, Visible: true);
+                dynamic doc = docObj;
+                try { doc.Activate(); } catch { }
                 if (!string.IsNullOrWhiteSpace(impressora))
                 {
-                    // Word.ActivePrinter muda a impressora padrão do Windows: é restaurada no fim.
-                    impressoraAnterior = word.ActivePrinter;
-                    word.ActivePrinter = impressora;
+                    try
+                    {
+                        // Escolhe a impressora só para este Word, sem mudar a padrão do Windows.
+                        word.WordBasic.FilePrintSetup(Printer: impressora, DoNotSetAsSysDefault: 1);
+                    }
+                    catch
+                    {
+                        // Plano B: ActivePrinter muda a padrão do Windows, que é restaurada no fim.
+                        impressoraAnterior = word.ActivePrinter;
+                        word.ActivePrinter = impressora;
+                    }
                 }
-                docObj = word.Documents.Open(arquivo, ConfirmConversions: false, ReadOnly: true, AddToRecentFiles: false, Visible: false);
-                dynamic doc = docObj;
                 ct.ThrowIfCancellationRequested();
+                enviando = true;
                 // Background:false espera o Word terminar de mandar ao spooler (não a impressão física).
                 doc.PrintOut(Background: false, Copies: Math.Clamp(copias, 1, 20));
                 resultado = new ResultadoImpressao(DesfechoImpressao.Enviado, "Comando enviado ao Word.");
@@ -57,9 +70,10 @@ public sealed class Word : IImpressoraWord, IConversorDocumentos
             }
             catch (Exception e)
             {
-                // Depois de abrir o documento, um erro não garante que nada foi enviado.
-                resultado = new ResultadoImpressao(docObj == null ? DesfechoImpressao.Falhou : DesfechoImpressao.Incerto,
-                    $"O Word não conseguiu imprimir o documento. {e.Message}");
+                // Antes do comando de imprimir, nada foi enviado (erro). Durante ele, não dá para garantir (incerto).
+                resultado = enviando
+                    ? new ResultadoImpressao(DesfechoImpressao.Incerto, $"O Word deu erro durante o envio. Confira a impressora antes de reenviar. {e.Message}")
+                    : new ResultadoImpressao(DesfechoImpressao.Falhou, $"O Word não conseguiu preparar a impressão; nada foi enviado. {e.Message}");
             }
             finally
             {
