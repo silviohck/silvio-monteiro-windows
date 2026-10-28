@@ -9,6 +9,8 @@ permissions:
 jobs:
   windows:
     runs-on: windows-2025
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -39,6 +41,46 @@ jobs:
           name: Orthck-Windows
           path: dist/Orthck.exe
           if-no-files-found: error
+      # Abre o app com dados de demonstração fictícios, fotografa cada tela e janela e falha se alguma der erro.
+      - name: Capturas de tela (todas as telas abrem sem erro)
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath dist/Orthck.exe -ArgumentList '--capturar', "$PWD\capturas" -PassThru
+          if (-not $p.WaitForExit(300000)) { $p.Kill(); throw "As capturas não terminaram em 5 minutos." }
+          Get-ChildItem capturas | Format-Table Name, Length
+          Get-Content capturas/erros.txt
+          if ($p.ExitCode -ne 0) { throw "Alguma tela deu erro ao abrir (veja erros.txt acima)." }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Capturas-de-tela
+          path: capturas/
+          if-no-files-found: ignore
+      # Guarda as capturas na branch capturas-ci (uma pasta por branch), para revisão visual sem baixar artefatos.
+      - name: Publicar capturas na branch capturas-ci
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          [ -d capturas ] || exit 0
+          ref="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          pasta="$(echo "$ref" | tr '/' '-')"
+          url="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          dir="$RUNNER_TEMP/capturas-ci"
+          if git ls-remote --exit-code "$url" capturas-ci >/dev/null 2>&1; then
+            git clone --quiet --depth 1 --branch capturas-ci "$url" "$dir"
+          else
+            git init --quiet "$dir"; git -C "$dir" checkout --quiet -b capturas-ci; git -C "$dir" remote add origin "$url"
+          fi
+          rm -rf "$dir/$pasta"; mkdir -p "$dir/$pasta"; cp capturas/* "$dir/$pasta/"
+          cd "$dir"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit --quiet -m "Capturas de $ref ($GITHUB_SHA)" || exit 0
+          git push --quiet origin capturas-ci
 
   # Cada versão da main vira uma Release com o Orthck.exe: link direto, sem precisar abrir o Actions.
   release:

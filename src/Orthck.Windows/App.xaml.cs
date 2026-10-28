@@ -5,21 +5,12 @@ namespace Orthck.Windows;
 
 public partial class App : Application
 {
-    // Duas janelas do Orthck gravariam o mesmo dados.json (a última apagaria o que a outra salvou)
-    // e poderiam imprimir a mesma fila duas vezes.
-    private static Mutex? _singleInstance;
+    // Duas janelas do Orthck gravariam o mesmo dados.json e poderiam imprimir a mesma fila duas vezes.
+    private static Mutex? _umaInstancia;
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-        _singleInstance = new Mutex(true, @"Local\Orthck.Windows.Instancia", out var first);
-        if (!first)
-        {
-            MessageBox.Show("O Orthck já está aberto. Use a janela existente (veja a barra de tarefas).", "Orthck",
-                MessageBoxButton.OK, MessageBoxImage.Information);
-            Shutdown(0);
-            return;
-        }
         // Um erro inesperado numa tela não pode fechar o app no meio de um atendimento.
         DispatcherUnhandledException += (_, args) =>
         {
@@ -27,19 +18,70 @@ public partial class App : Application
                 "Orthck", MessageBoxButton.OK, MessageBoxImage.Error);
             args.Handled = true;
         };
-        try
+
+        // Modo usado pelo CI: gera capturas de tela de todas as telas com dados de demonstração e fecha.
+        var indice = Array.IndexOf(e.Args, "--capturar");
+        if (indice >= 0 && indice + 1 < e.Args.Length)
         {
-            var storage = new Storage();
-            var queue = new PrintQueue(storage, new OfficeWordPrinter());
-            new MainWindow(storage, queue).Show();
+            Capturas.Executar(this, e.Args[indice + 1]);
+            return;
         }
-        catch (Exception ex)
+
+        _umaInstancia = new Mutex(true, @"Local\Orthck.Windows.Instancia", out var primeira);
+        if (!primeira)
         {
-            MessageBox.Show($"Não foi possível carregar os dados do Orthck. Nenhum cadastro foi sobrescrito.\n\n{ex.Message}\n\n" +
-                "A versão anterior fica em dados.backup.json (e cópias antes-importacao-*.json) na mesma pasta; " +
-                "para restaurá-la, feche o Orthck, guarde o dados.json atual e renomeie o backup para dados.json.",
-                "Orthck — Dados protegidos", MessageBoxButton.OK, MessageBoxImage.Error);
-            Shutdown(1);
+            MessageBox.Show("O Orthck já está aberto. Use a janela que já existe (veja a barra de tarefas).", "Orthck", MessageBoxButton.OK, MessageBoxImage.Information);
+            Shutdown(0);
+            return;
+        }
+
+        Ajustes.Carregar();
+        Tema.Aplicar(this, Ajustes.Atual.TamanhoTexto, Ajustes.Atual.Aparencia);
+        var armazenamento = AbrirDados();
+        if (armazenamento == null) { Shutdown(1); return; }
+        var janela = new JanelaPrincipal(armazenamento, new Word());
+        MainWindow = janela;
+        janela.Show();
+    }
+
+    /// <summary>Abre os dados; se o dados.json estiver ilegível, oferece restaurar o backup mais recente.</summary>
+    private static Armazenamento? AbrirDados()
+    {
+        var pasta = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Orthck");
+        while (true)
+        {
+            try
+            {
+                return new Armazenamento(pasta) { Conversor = new Word(), ResolverAtalho = Atalhos.Resolver };
+            }
+            catch (DadosIlegiveisException ex)
+            {
+                var backups = Directory.Exists(Path.Combine(pasta, "Backups"))
+                    ? Directory.GetFiles(Path.Combine(pasta, "Backups"), "dados-*.json").OrderByDescending(f => f, StringComparer.Ordinal).ToList() : [];
+                if (backups.Count == 0)
+                {
+                    MessageBox.Show($"{ex.Message}\n\nNão há backup automático para restaurar. Nada foi apagado; a pasta de dados será aberta para você conferir.",
+                        "Orthck — Dados protegidos", MessageBoxButton.OK, MessageBoxImage.Error);
+                    Ui.AbrirPasta(pasta);
+                    return null;
+                }
+                var resposta = MessageBox.Show(
+                    $"{ex.Message}\n\nRestaurar o backup automático mais recente ({Path.GetFileNameWithoutExtension(backups[0]).Replace("dados-", "")})? " +
+                    "O arquivo atual continua guardado na pasta de dados.",
+                    "Orthck — Dados protegidos", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
+                if (resposta != MessageBoxResult.Yes) { Ui.AbrirPasta(pasta); return null; }
+                try { Armazenamento.RestaurarBackup(pasta, backups[0]); }
+                catch (Exception erro)
+                {
+                    MessageBox.Show($"Não foi possível restaurar o backup: {erro.Message}", "Orthck", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Não foi possível abrir os dados do Orthck. Nada foi apagado.\n\n{ex.Message}", "Orthck", MessageBoxButton.OK, MessageBoxImage.Error);
+                return null;
+            }
         }
     }
 }

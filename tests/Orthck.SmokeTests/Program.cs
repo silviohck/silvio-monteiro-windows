@@ -200,6 +200,13 @@ try
     using (var z = ZipFile.OpenRead(zip))
         Assert(z.Entries.Any(e => e.FullName.EndsWith("Orthck - dados (backup).json")) && !z.Entries.Any(e => e.Name.StartsWith("~$")), "compactar pasta leva os dados e deixa os temporários");
 
+    // ===== Subpastas em níveis =====
+    var arvore = NoSubpasta.Arvore(["RX / Joelho", "1 - APAC / Fisioterapia / coluna", "RX", "1 - APAC / Fisioterapia", "10 - Laudos", "2 - Receitas"]);
+    Assert(string.Join(",", arvore.Select(n => n.Nome)) == "1 - APAC,2 - Receitas,10 - Laudos,RX"
+        && arvore[3].TemModelos && arvore[3].Filhos.Single().Caminho == "RX / Joelho"
+        && !arvore[0].TemModelos && arvore[0].Filhos[0].TemModelos && arvore[0].Filhos[0].Filhos[0].Caminho == "1 - APAC / Fisioterapia / coluna",
+        "árvore de subpastas em ordem do Explorador, com pastas que têm modelos próprios");
+
     // ===== Tabelas =====
     Assert(TabelaDeCodigos.Cid10.Codigos.Count == 14233 && TabelaDeCodigos.Sigtap.Codigos.Count(c => !c.EhTitulo) == 5039 && TabelaDeCodigos.Tuss.Codigos.Count == 5966,
         "tabelas CID-10, SIGTAP e TUSS embutidas completas");
