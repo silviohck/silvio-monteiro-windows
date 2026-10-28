@@ -181,6 +181,13 @@ public sealed class JanelaPrincipal : Window
         var procurar = Ui.Botao("Impressoras do Windows…", Impressoras.AbrirConfiguracoes, glifo: Ui.GBusca, dica: "Abre as configurações de impressoras do Windows para adicionar uma impressora ou escolher a padrão");
         procurar.HorizontalAlignment = HorizontalAlignment.Stretch;
         impressora.Add(procurar);
+        var dados = Ui.Coluna(6);
+        dados.Add(Ui.TituloSecao("Dados", Ui.GBackup));
+        var importar = Ui.Botao("Importar dados (.json)…", () => ImportarDados(), glifo: Ui.GImportar,
+            dica: "Pacientes, locais, modelos, tipos, histórico e fila de um dados.json do Mac ou de um backup");
+        importar.HorizontalAlignment = HorizontalAlignment.Stretch;
+        dados.Add(importar);
+        _rodapeLateral.Add(dados);
         var ajustes = Ui.Botao("Ajustes…", AbrirAjustes, glifo: Ui.GEngrenagem, dica: "Aparência, dados e backup (Ctrl+,)");
         ajustes.HorizontalAlignment = HorizontalAlignment.Stretch;
         _rodapeLateral.Add(ajustes);
@@ -250,6 +257,30 @@ public sealed class JanelaPrincipal : Window
 
     /// <summary>A tela Modelos acompanha o andamento da sincronização.</summary>
     public event Action? SincronizacaoMudou;
+
+    /// <summary>
+    /// Importa um dados.json (do Mac, do .zip "Orthck - dados (backup).json" ou de um backup). Os dados atuais vão antes
+    /// para Backups. Se houver a pasta Modelos ao lado do arquivo, as cópias dos modelos vêm junto.
+    /// </summary>
+    public bool ImportarDados()
+    {
+        var dialogo = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Escolha o arquivo de dados do Orthck (.json)",
+            Filter = "Dados do Orthck (*.json)|*.json|Todos os arquivos|*.*"
+        };
+        if (dialogo.ShowDialog(this) != true) return false;
+        if (!Ui.Confirmar($"Importar “{Path.GetFileName(dialogo.FileName)}”?",
+            "Os pacientes, locais, modelos, histórico e fila deste computador serão substituídos pelos do arquivo. Uma cópia dos dados atuais fica guardada em Backups (Ajustes › Restaurar um backup).", true)) return false;
+        try
+        {
+            var resumo = Arm.ImportarDadosDoMac(dialogo.FileName);
+            Recarregar();
+            Ui.Informar($"Dados importados: {resumo}");
+            return true;
+        }
+        catch (Exception ex) { Ui.Erro(ex.Message); return false; }
+    }
 
     public void AbrirAjustes()
     {
