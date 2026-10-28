@@ -49,3 +49,16 @@ O proprietário relatou que a versão Windows estava "praticamente não utilizá
 - 46 testes de regressão; o CI abre todas as telas e falha se alguma der erro.
 - Riscos remanescentes: impressão e conversão pelo Word real, atalhos `.lnk` e pastas de rede/OneDrive ainda sem teste no Windows físico.
 
+## 28/10/2026 — Revisão de estabilidade
+
+| Risco | Correção | Teste |
+|---|---|---|
+| `dados.json` aberto por um instante por antivírus/OneDrive fazia a gravação falhar de primeira | Até 8 tentativas (~2 s) antes de mostrar o erro | Simulado (arquivo bloqueado) |
+| Falha ao gravar "enviando" no meio da fila deixava o item preso | Nada é enviado ao Word e o item volta a "aguardando" | Automatizado |
+| Erros em gerar/imprimir/sincronizar sumiam sem aviso | Mostrados na tela e registrados em `erros.log` (Ajustes › Registro de erros) | — |
+| Documento gerado, mas histórico não gravado | Aviso com o caminho do documento | — |
+| Word ocupado (conversão de modelo) marcava a impressão como "Conferir" e parava a fila | Espera até 2 min; se não liberar, "Erro" (nada foi enviado) | — |
+| Sincronização ao voltar para o app refazia a tela Gerar e tirava o cursor da caixa | Só refaz se algum modelo mudou; erro automático não abre janela (evita repetição) | — |
+| Lista de Pacientes lenta com muito histórico | Locais por paciente calculados uma vez | Automatizado |
+| Caminho acima de 259 caracteres (o Word não abre) | Nome do documento encurtado, mantendo modelo, paciente e data | Automatizado |
+

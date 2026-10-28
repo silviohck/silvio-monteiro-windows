@@ -110,17 +110,36 @@ public sealed partial class Armazenamento
         Mudou?.Invoke();
     }
 
-    private void Gravar(DadosApp dados, string destino)
+    /// <summary>
+    /// Grava de forma atômica. Antivírus, OneDrive e programas de backup costumam abrir o dados.json por um instante;
+    /// a troca é tentada de novo por até ~2 segundos antes de desistir (e então o erro é mostrado, nada é perdido em memória).
+    /// </summary>
+    private static void Gravar(DadosApp dados, string destino)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(destino)!);
         var tmp = destino + $".{Guid.NewGuid():N}.tmp";
         try
         {
             File.WriteAllBytes(tmp, JsonSerializer.SerializeToUtf8Bytes(dados, Json));
-            if (File.Exists(destino)) File.Replace(tmp, destino, null, ignoreMetadataErrors: true);
-            else File.Move(tmp, destino);
+            for (var tentativa = 1; ; tentativa++)
+            {
+                try
+                {
+                    if (File.Exists(destino)) File.Replace(tmp, destino, null, ignoreMetadataErrors: true);
+                    else File.Move(tmp, destino);
+                    return;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && tentativa < 8)
+                {
+                    Thread.Sleep(50 * tentativa);
+                }
+            }
         }
-        finally { if (File.Exists(tmp)) File.Delete(tmp); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new IOException($"Não foi possível gravar os dados ({ex.Message}). As alterações continuam na tela; tente de novo em instantes. Se repetir, feche programas que estejam usando a pasta de dados.", ex);
+        }
+        finally { try { if (File.Exists(tmp)) File.Delete(tmp); } catch { } }
     }
 
     /// <summary>Uma vez por dia, antes de gravar, guarda o dados.json como estava e apaga os mais antigos que os últimos 30.</summary>
@@ -260,6 +279,26 @@ public sealed partial class Armazenamento
             if (local != null && !ids.Contains(local.Id)) ids.Add(local.Id);
         }
         return ids.Select(id => Local(id)).OfType<LocalAtendimento>().ToList();
+    }
+
+    /// <summary>Para listas grandes: ids dos locais de cada paciente (cadastro + histórico), numa passada só.</summary>
+    public Dictionary<Guid, HashSet<Guid>> LocaisPorPaciente()
+    {
+        var mapa = new Dictionary<Guid, HashSet<Guid>>();
+        HashSet<Guid> De(Guid id) => mapa.TryGetValue(id, out var s) ? s : mapa[id] = [];
+        foreach (var p in Dados.Pacientes) if (p.LocalId is Guid l) De(p.Id).Add(l);
+        var porNome = new Dictionary<string, Guid>();
+        foreach (var documento in Dados.Historico)
+        {
+            if (documento.PacienteId is not Guid pid || documento.Local is not { } nome) continue;
+            if (!porNome.TryGetValue(nome, out var lid))
+            {
+                lid = Dados.Locais.FirstOrDefault(l => Texto.MesmoNome(l.Nome, nome))?.Id ?? Guid.Empty;
+                porNome[nome] = lid;
+            }
+            if (lid != Guid.Empty) De(pid).Add(lid);
+        }
+        return mapa;
     }
 
     /// <summary>"Alagoa Grande" ou "Alagoa Grande, Araruna".</summary>

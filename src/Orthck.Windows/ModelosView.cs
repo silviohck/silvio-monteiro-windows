@@ -194,7 +194,7 @@ public sealed class ModelosView : UserControl
         var nome = Ui.Texto(Path.GetFileName(pasta.TrimEnd('\\')), Estilo.Normal);
         nome.FontWeight = FontWeights.SemiBold; nome.TextWrapping = TextWrapping.NoWrap; nome.TextTrimming = TextTrimming.CharacterEllipsis;
         nome.ToolTip = pasta;
-        var sincronizar = Ui.BotaoIcone(Ui.GAtualizar, "Sincronizar agora", () => _ = _janela.Sincronizar(forcar: true), Tema.Destaque);
+        var sincronizar = Ui.BotaoIcone(Ui.GAtualizar, "Sincronizar agora", () => Ui.ExecutarAsync(() => _janela.Sincronizar(forcar: true)), Tema.Destaque);
         sincronizar.IsEnabled = !Arm.Sincronizacao.EmAndamento;
         var configurar = Ui.BotaoIcone(Ui.GEngrenagem, "Pasta sincronizada e subpastas", ConfigurarSincronizacao, Tema.Destaque);
         var icone = Ui.Icone(Ui.GSincronizar, 13);
@@ -232,7 +232,7 @@ public sealed class ModelosView : UserControl
     {
         new AjustesSincronizacaoJanela(_janela) { Owner = _janela }.ShowDialog();
         AtualizarTudo();
-        _ = _janela.Sincronizar(forcar: true);
+        Ui.ExecutarAsync(() => _janela.Sincronizar(forcar: true));
     }
 
     // MARK: Importar e excluir

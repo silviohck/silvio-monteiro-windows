@@ -60,7 +60,7 @@ public sealed class JanelaPrincipal : Window
 
         Arm.Mudou += () => Dispatcher.InvokeAsync(AtualizarLateral);
         // Ao abrir o app e sempre que ele volta para a frente, acompanha a pasta de modelos (como no Mac).
-        Activated += (_, _) => _ = Sincronizar();
+        Activated += (_, _) => Ui.ExecutarAsync(() => Sincronizar());
         Closing += (_, e) =>
         {
             if (Arm.ProcessandoFila && !Ui.Confirmar("A fila ainda está enviando documentos ao Word.", "Fechar agora pode deixar a impressão incompleta. Fechar mesmo assim?", true))
@@ -167,7 +167,7 @@ public sealed class JanelaPrincipal : Window
         {
             var pasta = Ui.Coluna(6);
             pasta.Add(Ui.TituloSecao("Pasta de modelos", Ui.GZip));
-            var compactar = Ui.Botao(_compactando ? "Compactando…" : "Compactar (.zip)…", () => _ = Compactar(), glifo: Ui.GZip,
+            var compactar = Ui.Botao(_compactando ? "Compactando…" : "Compactar (.zip)…", () => Ui.ExecutarAsync(() => Compactar()), glifo: Ui.GZip,
                 dica: "Cria um .zip com todos os arquivos da pasta sincronizada (e uma cópia dos dados)");
             compactar.IsEnabled = !_compactando;
             compactar.HorizontalAlignment = HorizontalAlignment.Stretch;
@@ -250,9 +250,16 @@ public sealed class JanelaPrincipal : Window
         if (!forcar && DateTime.Now - _ultimaSincronizacao < TimeSpan.FromSeconds(5)) return;
         _ultimaSincronizacao = DateTime.Now;
         try { await Arm.SincronizarAsync(() => SincronizacaoMudou?.Invoke()); }
-        catch (Exception ex) { Ui.Erro($"Erro ao sincronizar a pasta de modelos: {ex.Message}"); }
+        catch (Exception ex)
+        {
+            Registro.Erro("sincronizar", ex);
+            // Automática (ao voltar para o app): sem janela de erro, que reativaria o app e repetiria a sincronização.
+            if (forcar) Ui.Erro($"Erro ao sincronizar a pasta de modelos: {ex.Message}");
+        }
         SincronizacaoMudou?.Invoke();
-        if (SecaoAtual == Secao.Gerar) _gerar?.AoAparecer();
+        // Só refaz a tela Gerar se algum modelo mudou: assim o cursor não sai da caixa em que se está digitando.
+        var estado = Arm.Sincronizacao;
+        if (SecaoAtual == Secao.Gerar && (estado.Novos + estado.Atualizados + estado.Removidos) > 0) _gerar?.AoAparecer();
     }
 
     /// <summary>A tela Modelos acompanha o andamento da sincronização.</summary>

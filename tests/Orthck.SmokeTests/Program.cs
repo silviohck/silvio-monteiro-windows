@@ -178,6 +178,28 @@ try
     Assert(new Armazenamento(pastaDados).Dados.FilaImpressao.Single(x => x.Id == itens[2].Id).Situacao == SituacaoImpressao.Incerto
         && File.ReadAllText(Path.Combine(pastaDados, "dados.json")).Contains("\"incerto\""), "app fechado durante envio: fica incerto e gravado");
 
+    // Gravação bloqueada: nada é enviado ao Word e o item volta a aguardar (sem ficar preso em "enviando").
+    var pastaBloqueada = Path.Combine(raiz, "bloqueada");
+    var bloq = new Armazenamento(pastaBloqueada);
+    var docBloq = new DocumentoGerado { Modelo = "Laudo", Paciente = "X", Caminho = docs[0].Caminho };
+    bloq.Registrar(docBloq);
+    var itemBloq = bloq.AdicionarAFila(docBloq, 1);
+    File.Delete(bloq.ArquivoDados); Directory.CreateDirectory(bloq.ArquivoDados);
+    var naoDeveImprimir = new ImpressoraSimulada(DesfechoImpressao.Enviado);
+    try { await bloq.ImprimirFilaAsync([itemBloq.Id], null, naoDeveImprimir); Assert(false, "gravação bloqueada interrompe a impressão"); }
+    catch (IOException) { Assert(naoDeveImprimir.Enviados == 0 && itemBloq.Situacao == SituacaoImpressao.Pendente && !bloq.ProcessandoFila, "gravação bloqueada: nada é enviado e o item volta a aguardar"); }
+
+    // Caminho longo: o Word não abre arquivos acima de 259 caracteres.
+    var pastaFunda = Path.Combine(raiz, new string('p', 40), new string('q', 40), new string('r', 40));
+    var nomeLongo = new ModeloDocumento { Nome = new string('M', 80) };
+    var longo = arm.CaminhoParaNovoDocumento(nomeLongo, "", null, new string('N', 80), pastaFunda, new DateTime(2026, 10, 28));
+    Assert(Path.GetFullPath(longo).Length <= Armazenamento.MaximoDoCaminho - 5 && longo.EndsWith("28-10-2026.docx") && Path.GetFileName(longo).StartsWith("MMMM"),
+        $"caminho longo encurta o nome mantendo o começo e a data ({Path.GetFullPath(longo).Length}: {Path.GetFileName(longo)})");
+
+    // Locais por paciente numa passada só (lista grande de pacientes).
+    var mapa = arm.LocaisPorPaciente();
+    Assert(mapa[p1.Id].SetEquals(arm.LocaisDoPaciente(p1).Select(l => l.Id)), "locais por paciente iguais ao cálculo individual");
+
     // ===== Sincronização =====
     var pastaSync = Path.Combine(raiz, "Modelos sincronizados");
     var simples = "<w:p><w:r><w:t>{{NOME}}</w:t></w:r></w:p>";

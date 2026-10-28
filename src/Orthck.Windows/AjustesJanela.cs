@@ -37,6 +37,9 @@ public sealed class AjustesJanela : Dialogo
             : $"{Texto.Plural(backups.Count, "backup diário", "backups diários")}; o mais recente é de {Path.GetFileNameWithoutExtension(backups[0]).Replace("dados-", "")}.", Estilo.Normal, Tema.TextoSecundario), 140));
         var botoes = new WrapPanel { Tag = 8.0 };
         botoes.Add(Ui.Botao("Abrir pasta de dados (backup)", () => Ui.AbrirPasta(arm.Pasta), glifo: Ui.GPastaAberta));
+        if (File.Exists(Registro.Arquivo))
+            botoes.Add(Ui.Botao("Registro de erros", () => Ui.MostrarNaPasta(Registro.Arquivo), glifo: Ui.GNota,
+                dica: "Mostra o arquivo erros.log (para enviar ao suporte, se algo der errado)"));
         botoes.Add(Ui.Botao("Restaurar um backup…", RestaurarBackup, glifo: Ui.GBackup));
         dados.Add(botoes);
         p.Add(Ui.Secao("Dados e backup", Ui.GBackup, dados,

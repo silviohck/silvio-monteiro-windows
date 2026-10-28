@@ -13,8 +13,11 @@ namespace Orthck.Windows;
 /// </summary>
 public static class Capturas
 {
+    public static bool Ativo { get; private set; }
+
     public static void Executar(Application app, string saida)
     {
+        Ativo = true;
         Directory.CreateDirectory(saida);
         app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
         var erros = new List<string>();

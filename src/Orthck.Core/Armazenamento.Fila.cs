@@ -96,7 +96,13 @@ public sealed partial class Armazenamento
                 }
                 item.Situacao = SituacaoImpressao.Enviando;
                 item.Observacao = null;
-                Salvar();
+                try { Salvar(); }
+                catch
+                {
+                    // Sem o "enviando" gravado, um fechamento do app poderia levar a reimprimir: não envia.
+                    item.Situacao = SituacaoImpressao.Pendente;
+                    throw;
+                }
                 ResultadoImpressao resultado;
                 try { resultado = await word.ImprimirAsync(item.Caminho, impressora, item.Copias, manterAberto, ct); }
                 catch (Exception ex) { resultado = new ResultadoImpressao(DesfechoImpressao.Incerto, ex.Message); }

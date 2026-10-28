@@ -315,6 +315,17 @@ public static class Ui
         catch (Exception ex) { Erro(ex.Message); }
     }
 
+    /// <summary>Para ações assíncronas (gerar, imprimir, sincronizar): o erro aparece na tela e vai para o log.</summary>
+    public static async void ExecutarAsync(Func<Task> acao)
+    {
+        try { await acao(); }
+        catch (Exception ex)
+        {
+            Registro.Erro("ação", ex);
+            Erro(ex.Message);
+        }
+    }
+
     public static void Erro(string mensagem) =>
         MessageBox.Show(Application.Current?.MainWindow!, mensagem, "Orthck — Atenção", MessageBoxButton.OK, MessageBoxImage.Warning);
 

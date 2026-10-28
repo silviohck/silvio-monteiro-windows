@@ -202,6 +202,9 @@ public sealed partial class Armazenamento
 
     // MARK: Pastas dos documentos gerados
 
+    /// <summary>Limite de caminho que o Word consegue abrir.</summary>
+    public const int MaximoDoCaminho = 259;
+
     /// <summary>Separa as pastas de uma subpasta com mais de um nível: "RX / Joelho".</summary>
     public const string SeparadorDeSubpastas = " / ";
 
@@ -279,6 +282,15 @@ public sealed partial class Armazenamento
         var partes = new[] { modelo.Nome, paciente, local?.Nome ?? "", (data ?? DateTime.Now).ToString("dd-MM-yyyy", System.Globalization.CultureInfo.InvariantCulture) };
         var nomeBase = Texto.NomeSeguro(string.Join(" - ", partes.Where(p => p.Trim().Length > 0)));
         if (nomeBase.Length == 0) nomeBase = "Documento";
+        // O Word não abre (nem imprime) arquivos com caminho acima de 259 caracteres: encurta o nome se precisar,
+        // mantendo o começo (modelo e paciente) e a data no fim.
+        var cabe = MaximoDoCaminho - Path.GetFullPath(pasta).Length - 1 - ".docx".Length - " (99)".Length;
+        if (nomeBase.Length > cabe)
+        {
+            var dataTexto = partes[3];
+            var inicio = Math.Max(10, cabe - dataTexto.Length - 3);
+            nomeBase = nomeBase[..Math.Min(inicio, nomeBase.Length)].TrimEnd(' ', '-', '.') + " - " + dataTexto;
+        }
         var destino = Path.Combine(pasta, nomeBase + ".docx");
         for (var n = 2; File.Exists(destino); n++) destino = Path.Combine(pasta, $"{nomeBase} ({n}).docx");
         return destino;

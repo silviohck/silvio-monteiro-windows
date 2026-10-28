@@ -642,11 +642,11 @@ public sealed class GerarView : UserControl
             {
                 aviso.Children.Add(MargemDireita(Ui.Link("Mostrar no Explorador", () => Ui.MostrarNaPasta(ultimo))));
                 var jaEnviado = Arm.Dados.FilaImpressao.Any(x => x.Caminho == ultimo && x.Situacao != SituacaoImpressao.Pendente);
-                if (!_imprimindo && !Arm.ProcessandoFila && !jaEnviado) aviso.Children.Add(Ui.Link("Imprimir agora", () => _ = ImprimirAgora(ultimo)));
+                if (!_imprimindo && !Arm.ProcessandoFila && !jaEnviado) aviso.Children.Add(Ui.Link("Imprimir agora", () => Ui.ExecutarAsync(() => ImprimirAgora(ultimo))));
                 else if (_imprimindo) aviso.Children.Add(Ui.Texto("Enviando…", Estilo.Normal, Tema.TextoSecundario));
             }
         }
-        var gerar = Ui.Botao("Gerar documento", () => _ = Gerar(modelo), principal: true, glifo: Ui.GSalvar);
+        var gerar = Ui.Botao("Gerar documento", () => Ui.ExecutarAsync(() => Gerar(modelo)), principal: true, glifo: Ui.GSalvar);
         gerar.IsDefault = true;
         gerar.Padding = new Thickness(18, 9, 18, 9);
         gerar.IsEnabled = !_geracaoConcluida && !PrecisaEscolherPaciente && !(NomeDigitado.Length == 0 && modelo.Campos.Any(CamposAutomaticos.EhNomeDoPaciente));
@@ -739,7 +739,16 @@ public sealed class GerarView : UserControl
             CamposAutomaticos.Guardar(valoresFinais, modelo.Campos, paciente);
         }
         var documento = new DocumentoGerado { Modelo = modelo.Nome, ModeloId = modelo.Id, Paciente = nome, PacienteId = pacienteId, Local = Local?.Nome, Caminho = destino };
-        Arm.Registrar(documento);
+        try { Arm.Registrar(documento); }
+        catch (Exception ex)
+        {
+            // O documento já existe: o aviso diz onde ele está, para não se perder.
+            Registro.Erro("registrar documento", ex);
+            _ultimoDocumento = destino;
+            Atualizar();
+            Ui.Erro($"O documento foi salvo em:\n{destino}\n\nMas os dados do app (histórico) não puderam ser gravados agora; isso é tentado de novo na próxima alteração. Ele não foi colocado na fila.\n\n{ex.Message}");
+            return;
+        }
         // O nome do paciente fica copiado, pronto para colar (Ctrl+V) em outro sistema.
         var copiado = "";
         if (nome.Length > 0) { try { Clipboard.SetText(nome); copiado = " · nome copiado"; } catch { } }
