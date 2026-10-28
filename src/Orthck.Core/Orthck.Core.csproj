@@ -5,4 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- CID-10, SIGTAP e TUSS embutidos (gerados por tools/gerar_tabelas.py a partir do projeto Mac). -->
+    <EmbeddedResource Include="Tabelas\*.txt" LogicalName="Orthck.Core.Tabelas.%(Filename)%(Extension)" />
+  </ItemGroup>
 </Project>

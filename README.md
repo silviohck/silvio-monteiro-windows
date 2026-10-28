@@ -5,13 +5,16 @@ priorizando **previsibilidade, estabilidade e paridade funcional**.
 
 > **Estado atual:** primeira implementação funcional / versão de desenvolvimento. **Não certificada para uso clínico real** até passar pela compilação do Windows, testes de impressão em Word e homologação com modelos reais. Algumas funcionalidades têm paridade inicial, outras ainda dependem de conclusão; veja [Matriz de paridade](docs/PARIDADE.md).
 
+## O que é
+
+Versão Windows do Orthck, espelhando o app do Mac tela por tela: Gerar documento, Fila de impressão, Pacientes, Locais de atendimento, Modelos (com pasta sincronizada), Histórico e as tabelas CID-10, SIGTAP e TUSS. Veja a [matriz de paridade](docs/PARIDADE.md).
+
 ## Tecnologias
 
-- **C# / .NET 10 LTS / WPF**: aplicação desktop nativa Windows.
-- **System.IO.Compression + System.Xml.Linq**: motor Open XML que preenche DOCX diretamente, preserva o Word como editor e não usa a interface gráfica para preencher.
-- **Microsoft Word COM (late binding)**: impressão no objeto `Document`, usando uma fila persistente, serializada em STA e sem depender de `ActiveDocument`.
-- **JSON compatível com `dados.json` do Mac**, gravação com arquivo temporário + substituição atômica + backup. SQLite pode ser incorporado depois de uma migração reversível e testada.
-- **Testes independentes do Word**: campos divididos entre runs, pacientes consecutivos, CID, persistência e não duplicação de impressões.
+- **C# / .NET 10 / WPF** com o tema Fluent do Windows 11 e a paleta "Sereno" do Mac (claro e escuro).
+- `src/Orthck.Core`: dados (`dados.json` compatível com o Mac), modelos, sincronização da pasta, campos automáticos, preenchimento DOCX, fila e tabelas embutidas.
+- `src/Orthck.Windows`: interface e Microsoft Word por COM (imprimir e converter .doc/.rtf/.odt).
+- `tests/Orthck.SmokeTests`: testes de regressão sem Word.
 
 ## Baixar e testar
 
@@ -40,25 +43,23 @@ O workflow **Windows — compilar e testar Orthck** também publica uma compila�
 
 ## Primeiro uso
 
-1. Na aba **Modelos**, clique em **Escolher pasta de modelos**, indicando a pasta onde os DOCX estão organizados como `Local / Tipo / Modelo.docx` (subpastas adicionais são aceitas). Como no Mac, a pasta `1 - APAC` (e as demais de `pastasCompartilhadas` no `dados.json`) vale para todos os locais e aparece como um tipo em cada um; as `pastasIgnoradas` não viram locais.
-2. Configure a pasta principal dos documentos gerados. O padrão é `Documentos/Orthck`.
-3. Cadastre os locais ou importe uma cópia de `dados.json` do Mac, pelo botão **Importar dados do Mac**. A importação não remove o arquivo original e cria um backup dos dados locais anteriores.
-4. Em **Gerar documento**, escolha local, tipo e modelo, preencha o paciente e gere o documento. O padrão é adicionar à **Fila de impressão**.
-5. Na fila, confira os itens e clique em **Imprimir todos os pendentes**; o processamento é sequencial. **Enviado ao Word não garante que o papel saiu**.
+1. **Modelos › Sincronizar com uma pasta…**: escolha a pasta principal dos modelos (uma subpasta por local e, dentro dela, uma por tipo, como no Mac). Na ⚙️, cada subpasta pode ser **Local**, **Todos os locais** (a `1 - APAC` já vem assim) ou **Ignorar**. Arquivos novos viram modelos, editados são atualizados e apagados saem do app, sempre que você volta para o Orthck. Também dá para importar modelos avulsos (ou arrastar `.docx` para a janela).
+2. **Locais de atendimento**: confira os locais criados pela pasta e, se quiser, uma pasta própria para os documentos de cada um.
+3. **Gerar documento**: escolha local, subpasta e modelo, digite o nome do paciente (o app sugere os cadastrados), confira os campos e clique em **Gerar documento**. Os documentos ficam em `Documentos\Orthck\<Local>\<Tipo>` (ou na pasta principal escolhida). **Próximo paciente** (Ctrl+Shift+N) recomeça mantendo só o local.
+4. **Fila de impressão**: ao fim dos atendimentos, **Imprimir todos** manda um documento por vez para o Word. **Enviado ao Word não garante que o papel saiu**; um envio incerto para a fila e só é reenviado com sua confirmação.
+5. Vindo do Mac? **Ajustes › Importar dados do Mac…** com a pasta de dados do Mac copiada (dados.json + pasta Modelos).
 
 ### Cadastro e privacidade
 
-Os dados pessoais são armazenados **somente no computador local**, em `%LOCALAPPDATA%/Orthck/dados.json`. Nunca envie esse arquivo, documentos médicos, cadastros ou logs com informações reais para um repositório público. Antes de atender pacientes, implemente acesso restrito ao Windows, backups cifrados e uma política de retenção conforme a LGPD.
+Os dados ficam **somente neste computador**, em `%LOCALAPPDATA%\Orthck` (`dados.json`, a pasta `Modelos` e os backups diários em `Backups`). Nunca envie esse conteúdo, documentos de pacientes ou logs com informações reais para um repositório público. Antes de atender pacientes, use uma conta do Windows com senha, disco criptografado (BitLocker) e um backup fora do computador.
 
-## Importação CID-10 / SIGTAP / TUSS
+## Tabelas CID-10 / SIGTAP / TUSS
 
-O repositório Windows não contém ainda cópias das grandes tabelas do Mac. Para convertê-las a partir do projeto original:
+Vêm embutidas no app (as mesmas do Mac) e funcionam sem internet. Para atualizar depois que o projeto Mac atualizar as dele:
 
 ```powershell
-python tools/exportar_tabelas_mac.py C:\caminho\Silvio-Monteiro C:\temp\codigos
+python tools/gerar_tabelas.py C:\caminho\Silvio-Monteiro
 ```
-
-Em cada aba de códigos, **Importar tabela TSV…** e escolha o arquivo correspondente. O uso é offline após importar. Para paridade completa ainda serão necessários filtros por capítulos/grupos e atualização automática das competências.
 
 ## Princípios de estabilidade
 

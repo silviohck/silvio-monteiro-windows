@@ -20,10 +20,9 @@ Este arquivo documenta um pedido de transição; **não significa que o Claude e
 - `.github/workflows/windows-ci.yml`: build Windows, smoke tests, publicação do artefato `Orthck-Windows-x64`.
 - Fonte dos dados macOS: `dados.json`, com compatibilidade reversível e preservação de campos desconhecidos.
 
-## Estado em 27/10/2026
+## Estado em 28/10/2026
 
-- Versão Windows inicial **compila e passa nos testes do GitHub Actions**, mas **ainda não está homologada para uso clínico**, nem possui paridade funcional completa com o Mac.
-- Foram integradas as melhorias da branch `claude/eloquent-gates-s1hfgt` e a revisão de segurança da impressão/isolamento de pacientes no PR #3.
+- O Windows foi **reescrito a partir do código do Mac** (PR #6): núcleo e interface espelham `Silvio-Monteiro` tela por tela. Compila, passa nos testes e o CI abre todas as telas com dados fictícios (capturas na branch `capturas-ci`), mas **ainda não está homologado para uso clínico** (impressão real e Word real pendentes).
 - O resultado `enviado` significa apenas **comando enviado ao Word**, jamais confirmação física de impressão.
 - Ler antes de alterar: `README.md`, `docs/PARIDADE.md` e `docs/AUDITORIA-2026-10-27.md`.
 - Nunca incluir dados clínicos reais, CPF real, `dados.json` de produção, documentos de pacientes ou backups em commits, issues, logs ou testes. Este repositório pode ser público.

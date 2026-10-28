@@ -9,7 +9,7 @@ namespace Orthck.Core;
 /// Processamento OpenXML sem iniciar o Word. Funciona com {{CAMPOS}} partidos entre runs.
 /// A substituição mantém o estilo do primeiro run e nunca edita o modelo original.
 /// </summary>
-public static partial class DocxService
+public static partial class DocxTemplate
 {
     private static readonly XNamespace W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
     private static readonly XNamespace XmlNs = XNamespace.Xml;
@@ -17,7 +17,8 @@ public static partial class DocxService
     [GeneratedRegex(@"\{\{\s*([^{}]+?)\s*\}\}")]
     private static partial Regex Placeholder();
 
-    public static IReadOnlyList<string> Fields(string templatePath)
+    /// <summary>Campos {{CAMPO}} do documento, do cabeçalho, do rodapé e das notas, na ordem, sem repetição.</summary>
+    public static IReadOnlyList<string> Placeholders(string templatePath)
     {
         var found = new List<string>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -36,6 +37,7 @@ public static partial class DocxService
         return found;
     }
 
+    /// <summary>Gera <paramref name="outputPath"/> a partir do modelo, trocando cada {{CAMPO}} que tem valor; os outros ficam como estão.</summary>
     public static void Fill(string templatePath, string outputPath, IReadOnlyDictionary<string, string> values)
     {
         var dir = Path.GetDirectoryName(Path.GetFullPath(outputPath))!;

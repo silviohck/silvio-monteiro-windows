@@ -2,24 +2,33 @@
 
 Esta matriz diferencia **código implementado**, **paridade completa** e **testes reais**, evitando marcar como pronto algo que apenas parece pronto.
 
-| Funcionalidade | Windows: situação em código | Pendência para paridade real |
+Atualizada em 28/10/2026, após a reescrita a partir do código do Mac (PR #6).
+
+| Funcionalidade (Mac) | Windows | Pendência |
 |---|---|---|
-| Geração DOCX a partir de `{{CAMPOS}}` | Implementada (OpenXML) | Testar modelos reais complexos, imagens, tabelas, caixas de texto, seções |
-| Placeholders distribuídos em runs | Implementada; teste automatizado | Comparar conteúdo com saída do Mac |
-| Dados automáticos de paciente/local/data/idade | Implementados | Verificar aliases atuais do Mac |
-| Campos de consulta (CID, conduta, afastamento) | Isolados por documento | Expandir testes de trocas parciais |
-| Cadastro de pacientes/homônimos | Básico funcional | Mesclar cadastros, validar CPF/data, melhoria da busca |
-| Locais de atendimento | Cadastro básico | Transferência segura de vínculos e preferências por local |
-| Modelos e subpastas | Descoberta recursiva; pastas compartilhadas (`1 - APAC`) e ignoradas como no Mac | Atalhos (.lnk), arquivos soltos na pasta do local, .doc/.rtf/.odt, tipos locais, sincronização bidirecional e remoção segura |
-| Histórico | Lista, abrir e colocar na fila | Filtros por paciente/local, reimpressão avançada |
-| Fila de impressão | Persistente, sequencial, seleção e reenvio confirmado | Testar diferentes impressoras/versões do Word |
-| Impressão pelo Word | COM por documento | Homologação em impressoras reais e validação de cópias |
-| CID-10 / SIGTAP / TUSS | Importador TSV e pesquisa | Incorporar bases oficiais versionadas/filtros avançados |
-| Dados do Mac | Leitura direta `dados.json` e backup | Testar importações das várias versões do Mac |
-| Aparência suave | WPF tema claro | Modo escuro e opção de tamanho do texto |
-| Backup/restauração | Backup ao salvar e antes de importar | Backup versionado, restauração guiada e criptografia |
-| Segurança clínica/LGPD | Não envia dados para a nuvem | Controle de acesso, criptografia, auditoria e plano de backup |
-| Sincronização Mac + Windows | Não implementada | Projeto separado após homologação local |
+| Geração DOCX a partir de `{{CAMPOS}}` (runs divididos, cabeçalho, rodapé, notas, caixas de texto) | Igual; testes automatizados e LibreOffice | Comparar com o Word real e com a saída do Mac |
+| Campos automáticos (paciente, local, data, data por extenso, idade) e aliases | Igual (`CamposAutomaticos`) | — |
+| Campos do atendimento (CID, conduta…) nunca vão para o cadastro | Igual; trocar nome/homônimo/modelo/subpasta/local recomeça esses campos (regra do CLAUDE.md, mais rígida que o Mac) | — |
+| Sugestões de CID no campo `{{CID}}` | Igual | — |
+| Modelos copiados para o app, com tipo, local e cópias | Igual | — |
+| Pasta sincronizada: locais, "Todos os locais" (1 - APAC), ignorar, subpastas em níveis, novos/alterados/apagados, proteção contra pasta vazia | Igual | Testar com OneDrive/rede |
+| Atalhos de pasta (alias do Finder) | Atalhos `.lnk` do Windows | Testar no Windows real |
+| Modelos .doc/.rtf/.odt | Convertidos pelo Word (COM) | Testar no Windows real |
+| Tipos por local (criar, renomear, excluir, ordem alfabética) | Igual | — |
+| Gerar documento: quadro do local, documento pronto, subpasta em níveis, pasta principal/do local/só este documento, abrir ao gerar, nome copiado | Igual | — |
+| Pacientes: sugestões com locais, homônimos, "é outro paciente", cadastro a partir do Gerar | Igual | Mesclar cadastros (não existe no Mac) |
+| Locais: pasta própria, excluir transferindo/desvinculando | Igual (Windows também edita cidade, endereço, telefone, e-mail e CNPJ) | — |
+| Histórico: abrir, mostrar na pasta, imprimir, pôr na fila, remover, limpar | Igual + busca | — |
+| Fila de impressão: persistente, um por vez, cópias, marcados, reenvio confirmado | Igual; envio incerto interrompe o lote | Homologar com impressora real |
+| Impressora escolhida na barra lateral | Lista do Windows; não muda a impressora padrão | Testar impressoras de rede |
+| Procurar/instalar impressoras na rede | Abre Configurações › Impressoras do Windows | — |
+| CID-10, SIGTAP, TUSS embutidos, busca sem acentos, filtro por capítulo/grupo, copiar | Igual (mesmas tabelas, `tools/gerar_tabelas.py`) | — |
+| Compactar pasta sincronizada (.zip) com backup dos dados | Igual | — |
+| Backup diário (30) | Igual + restauração guiada em Ajustes e ao abrir com dados ilegíveis | — |
+| Aparência Sereno, claro/escuro, tamanho do texto, atalhos | Igual (Ctrl +, Ctrl −, Ctrl 0, Ctrl+Shift+N) | — |
+| Importar dados do Mac | dados.json + pasta Modelos | Testar com dados reais anonimizados |
+| Segurança clínica/LGPD | Dados só no computador | Controle de acesso, criptografia |
+| Sincronização Mac + Windows | Não implementada | Projeto separado |
 
 ## Fluxo mínimo de homologação
 
