@@ -25,6 +25,10 @@ public sealed class ModelosView : UserControl
         _importar = Ui.Botao("Importar modelo", ImportarArquivos, glifo: Ui.GImportar, dica: "Importa arquivos avulsos, fora da pasta sincronizada");
         _importar.HorizontalAlignment = HorizontalAlignment.Stretch;
         _tela.Topo.Add(_importar);
+        var importarPasta = Ui.Botao("Importar pasta…", ImportarPasta, glifo: Ui.GPasta,
+            dica: "Importa todos os modelos de uma pasta e das subpastas dela (cada subpasta vira o tipo)");
+        importarPasta.HorizontalAlignment = HorizontalAlignment.Stretch;
+        _tela.Topo.Add(importarPasta);
         _tela.Topo.Add(_filtros);
         _tela.Topo.Add(_busca);
         _busca.TextChanged += (_, _) => Recarregar();
@@ -234,6 +238,25 @@ public sealed class ModelosView : UserControl
     // MARK: Importar e excluir
 
     private void ImportarArquivos() => Importar(Ui.EscolherDocumentos(varios: true));
+
+    private void ImportarPasta()
+    {
+        if (Ui.EscolherPasta("Escolha a pasta com os modelos (as subpastas também são importadas)") is not { } pasta) return;
+        var tipo = Ajustes.Atual.FiltroTipoModelos.Length == 0 ? null : Ajustes.Atual.FiltroTipoModelos;
+        try
+        {
+            var (importados, erros) = Arm.ImportarPasta(pasta, LocalFiltrado?.Id, tipo);
+            AtualizarTudo();
+            MostrarDetalhe();
+            var destino = LocalFiltrado is { } l ? $" para {l.Nome}" : "";
+            var mensagem = importados == 0 && erros.Count == 0
+                ? "Nenhum documento do Word (.docx, .doc, .rtf, .odt) encontrado nesta pasta."
+                : $"{Texto.Plural(importados, "modelo importado", "modelos importados")}{destino}.";
+            if (erros.Count > 0) Ui.Erro($"{mensagem}\n\nNão foi possível importar {erros.Count}:\n\n{string.Join("\n\n", erros.Take(10))}");
+            else Ui.Informar(mensagem);
+        }
+        catch (Exception ex) { Ui.Erro(ex.Message); }
+    }
 
     /// <summary>Importa para o local e o tipo escolhidos nos filtros.</summary>
     private void Importar(IEnumerable<string> arquivos)

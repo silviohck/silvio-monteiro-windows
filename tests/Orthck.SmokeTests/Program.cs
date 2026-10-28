@@ -82,6 +82,19 @@ try
     arm.RemoverCategoria("Receitas médicas", "Outros", local.Id);
     Assert(importado.Categoria == "Outros", "excluir tipo move os modelos");
 
+    // Importar uma pasta inteira
+    var pastaAvulsa = Path.Combine(raiz, "pasta para importar");
+    CriarDocx(Path.Combine(pastaAvulsa, "Atestado simples.docx"), "<w:p><w:r><w:t>{{NOME}}</w:t></w:r></w:p>");
+    CriarDocx(Path.Combine(pastaAvulsa, "RX", "Joelho", "rx joelho.docx"), "<w:p><w:r><w:t>{{NOME}}</w:t></w:r></w:p>");
+    CriarDocx(Path.Combine(pastaAvulsa, "RX", "~$rx joelho.docx"), "<w:p/>");
+    File.WriteAllText(Path.Combine(pastaAvulsa, "notas.txt"), "x");
+    var antes = arm.Dados.Modelos.Count;
+    var (qtd, errosPasta) = arm.ImportarPasta(pastaAvulsa, local.Id);
+    var rxJoelho = arm.Dados.Modelos.Single(m => m.Nome == "rx joelho");
+    Assert(qtd == 2 && errosPasta.Count == 0 && arm.Dados.Modelos.Count == antes + 2 && rxJoelho.Categoria == "RX / Joelho" && rxJoelho.LocalId == local.Id
+        && arm.Dados.Modelos.Single(m => m.Nome == "Atestado simples").Categoria == "Atestados",
+        "importar pasta inteira: subpasta vira o tipo, temporários e outros arquivos ficam de fora");
+
     // Homônimos e locais do paciente
     var p1 = arm.NovoPaciente("José Silva"); var p2 = arm.NovoPaciente("JOSÉ SILVA"); p2.DataNascimento = "01/01/1980";
     Assert(arm.PacientesChamados("jose silva").Count == 2 && Armazenamento.Identificacao(p2) == "nasc. 01/01/1980", "homônimos sem diferenciar acentos e identificação");
@@ -108,7 +121,7 @@ try
 
     // Persistência
     var reaberto = new Armazenamento(pastaDados);
-    Assert(reaberto.Dados.Pacientes.Count == 2 && reaberto.Dados.Modelos.Single().Categoria == "Outros", "dados persistem ao reabrir");
+    Assert(reaberto.Dados.Pacientes.Count == 2 && reaberto.Modelo(importado.Id)!.Categoria == "Outros", "dados persistem ao reabrir");
     var json = File.ReadAllText(Path.Combine(pastaDados, "dados.json"));
     Assert(System.Text.RegularExpressions.Regex.IsMatch(json, "\"criadoEm\": \"\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\dZ\"") && json.Contains("\"localID\"") && json.Contains("\"pastasCompartilhadas\""),
         "dados.json no formato do Mac (datas ISO 8601 sem frações, chaves iguais)");

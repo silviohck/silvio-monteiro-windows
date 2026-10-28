@@ -39,6 +39,31 @@ public sealed partial class Armazenamento
         return modelo;
     }
 
+    /// <summary>
+    /// Importa todos os modelos de uma pasta (e das subpastas) para o local escolhido. A subpasta vira o tipo
+    /// ("RX/Joelho/x.docx" → tipo "RX / Joelho"); arquivos soltos na pasta vão para <paramref name="tipo"/> ou para o tipo
+    /// sugerido pelo nome. Temporários do Word (~$) e arquivos ocultos ficam de fora. Devolve quantos entraram e os erros.
+    /// </summary>
+    public (int Importados, List<string> Erros) ImportarPasta(string pasta, Guid? localId, string? tipo = null)
+    {
+        if (!Directory.Exists(pasta)) throw new DirectoryNotFoundException($"Pasta não encontrada: {pasta}");
+        var opcoes = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.Hidden | FileAttributes.System };
+        var arquivos = Directory.EnumerateFiles(pasta, "*", opcoes)
+            .Where(a => Extensoes.Contains(Path.GetExtension(a).ToLowerInvariant()) && !Path.GetFileName(a).StartsWith("~$"))
+            .OrderBy(a => a, Texto.Ordem).ToList();
+        int importados = 0;
+        var erros = new List<string>();
+        foreach (var arquivo in arquivos)
+        {
+            var subpastas = Path.GetRelativePath(pasta, Path.GetDirectoryName(arquivo)!)
+                .Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries).Where(p => p != ".").ToList();
+            var tipoDoArquivo = subpastas.Count > 0 ? string.Join(SeparadorDeSubpastas, subpastas) : tipo;
+            try { ImportarModelo(arquivo, localId, tipoDoArquivo); importados++; }
+            catch (Exception ex) { erros.Add(ex.Message); }
+        }
+        return (importados, erros);
+    }
+
     /// <summary>Copia (ou converte, se não for .docx) o arquivo e devolve os campos encontrados. O original não é alterado.</summary>
     public List<string> CopiarModelo(string origem, string destino)
     {
