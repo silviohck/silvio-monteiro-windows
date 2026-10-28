@@ -353,7 +353,6 @@ public sealed class GerarView : UserControl
     private FrameworkElement MontarSecaoPaciente()
     {
         var corpo = Ui.Coluna(10);
-        var limpar = Ui.BotaoIcone(Ui.GFecharCirculo, "Limpar o nome e os campos do paciente", LimparPaciente);
         var colar = Ui.BotaoIcone(Ui.GColar, "Colar o nome copiado", () =>
         {
             // Cola o nome copiado de outro sistema, numa linha só.
@@ -367,17 +366,16 @@ public sealed class GerarView : UserControl
         var cadastro = Ui.Botao("Cadastro", AbrirCadastro, glifo: Ui.GPessoa, dica: "Abrir o cadastro do paciente para acrescentar informações (CPF, nascimento, contato)");
         cadastro.Padding = new Thickness(10, 5, 10, 5);
         cadastro.Margin = new Thickness(6, 0, 0, 0);
-        var botoes = Ui.Linha(0, limpar, colar, copiar, cadastro);
+        var botoes = Ui.Linha(0, colar, copiar, cadastro);
         botoes.VerticalAlignment = VerticalAlignment.Center;
         botoes.Margin = new Thickness(6, 0, 0, 0);
         _nome.TextChanged += (_, _) =>
         {
-            limpar.Visibility = _nome.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
             copiar.IsEnabled = NomeDigitado.Length > 0;
             cadastro.IsEnabled = NomeDigitado.Length > 0 && !PrecisaEscolherPaciente;
             cadastro.Content = Ui.ConteudoDoBotao("Cadastro", PacienteCadastrado == null ? Ui.GPessoaMais : Ui.GPessoa);
         };
-        limpar.Visibility = Visibility.Collapsed; copiar.IsEnabled = false; cadastro.IsEnabled = false;
+        copiar.IsEnabled = false; cadastro.IsEnabled = false;
         var linha = new DockPanel();
         DockPanel.SetDock(botoes, Dock.Right);
         linha.Children.Add(botoes);
@@ -492,7 +490,8 @@ public sealed class GerarView : UserControl
             var chave = CamposAutomaticos.Chave(campo);
             var longo = new[] { "DIAGNOSTICO", "CONDUTA", "OBSERVAC", "HISTORIA", "ANAMNESE", "EXAME", "RELATORIO", "JUSTIFICATIVA", "TRATAMENTO", "EVOLUCAO", "PRESCRICAO", "LAUDO" }
                 .Any(chave.Contains);
-            var caixa = Ui.CaixaDeTexto(_valores.GetValueOrDefault(campo, ""), campo, multilinha: longo);
+            var caixa = Ui.CaixaDeTexto(_valores.GetValueOrDefault(campo, ""), multilinha: longo);
+            System.Windows.Automation.AutomationProperties.SetName(caixa, campo);
             if (!longo) caixa.TextWrapping = TextWrapping.Wrap;
             var bloco = Ui.Coluna(4);
             var rotulo = Ui.Texto(campo, Estilo.Apoio);

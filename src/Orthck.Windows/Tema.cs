@@ -17,7 +17,7 @@ public static class Tema
         Superficie = "Superficie", Borda = "Borda", DestaqueSuave = "DestaqueSuave", TextoPrincipal = "TextoPrincipal",
         TextoSecundario = "TextoSecundario", TextoNoDestaque = "TextoNoDestaque", SucessoSuave = "SucessoSuave", AvisoSuave = "AvisoSuave";
     public const string TamanhoBase = "TamanhoBase", TamanhoLegenda = "TamanhoLegenda", TamanhoApoio = "TamanhoApoio",
-        TamanhoTitulo = "TamanhoTitulo", TamanhoSecao = "TamanhoSecao", TamanhoDestaque = "TamanhoDestaque";
+        TamanhoTitulo = "TamanhoTitulo", TamanhoSecao = "TamanhoSecao", TamanhoDestaque = "TamanhoDestaque", LarguraLateral = "LarguraLateral";
 
     private static readonly Dictionary<string, (string Claro, string Escuro)> Cores = new()
     {
@@ -58,15 +58,9 @@ public static class Tema
             app.Resources[chave] = pincel;
             app.Resources[chave + "Cor"] = cor;
         }
-        // O Fluent usa a cor de destaque do sistema; o Orthck usa o azul-petróleo do Mac.
-        var destaque = (Color)app.Resources[Destaque + "Cor"];
-        foreach (var chave in new[] { "SystemAccentColor", "SystemAccentColorLight1", "SystemAccentColorDark1", "SystemAccentColorLight2", "SystemAccentColorDark2", "SystemAccentColorLight3", "SystemAccentColorDark3" })
-            app.Resources[chave] = destaque;
-        app.Resources["AccentTextFillColorPrimaryBrush"] = app.Resources[Destaque];
-        app.Resources["AccentFillColorDefaultBrush"] = app.Resources[Destaque];
-        app.Resources["AccentFillColorSecondaryBrush"] = new SolidColorBrush(Color.FromArgb(0xE6, destaque.R, destaque.G, destaque.B));
-        app.Resources["AccentFillColorTertiaryBrush"] = new SolidColorBrush(Color.FromArgb(0xCC, destaque.R, destaque.G, destaque.B));
-        app.Resources["TextOnAccentFillColorPrimaryBrush"] = app.Resources[TextoNoDestaque];
+        // O Fluent usa a cor de destaque do Windows (azul); o Orthck usa o azul-petróleo do Mac. Os estilos do Fluent
+        // pegam essas cores dentro dos próprios dicionários, então elas são trocadas lá.
+        TrocarCoresDeDestaque(app.Resources, (Color)app.Resources[Destaque + "Cor"], (Color)app.Resources[TextoNoDestaque + "Cor"], 0);
 
         // Tamanho do texto comum (o Mac usa 15, 17 ou 19 pontos; aqui o mesmo em pixels independentes).
         double baseTexto = tamanho switch { TamanhoTexto.Grande => 16, TamanhoTexto.MuitoGrande => 18, _ => 14 };
@@ -76,6 +70,35 @@ public static class Tema
         app.Resources[TamanhoTitulo] = baseTexto + 6;
         app.Resources[TamanhoSecao] = baseTexto + 1;
         app.Resources[TamanhoDestaque] = baseTexto + 8;
+        app.Resources[LarguraLateral] = new GridLength(tamanho switch { TamanhoTexto.Grande => 280, TamanhoTexto.MuitoGrande => 310, _ => 250 });
+    }
+
+    private static void TrocarCoresDeDestaque(ResourceDictionary dicionario, Color destaque, Color textoNoDestaque, int nivel)
+    {
+        if (nivel > 6) return;
+        foreach (var chave in dicionario.Keys.OfType<string>().Where(k => k.Contains("Accent", StringComparison.Ordinal)).ToList())
+        {
+            var noDestaque = chave.Contains("TextOnAccent", StringComparison.Ordinal);
+            var cor = noDestaque ? textoNoDestaque : destaque;
+            // Uma cor que não puder ser trocada fica como a do Windows; nunca impede o app de abrir.
+            try
+            {
+            switch (dicionario[chave])
+            {
+                case Color original:
+                    dicionario[chave] = Color.FromArgb(original.A, cor.R, cor.G, cor.B);
+                    break;
+                case SolidColorBrush pincel:
+                    var novo = new SolidColorBrush(Color.FromArgb(pincel.Color.A, cor.R, cor.G, cor.B)) { Opacity = pincel.Opacity };
+                    novo.Freeze();
+                    dicionario[chave] = novo;
+                    break;
+            }
+            }
+            catch (InvalidOperationException) { }
+            catch (NotSupportedException) { }
+        }
+        foreach (var filho in dicionario.MergedDictionaries) TrocarCoresDeDestaque(filho, destaque, textoNoDestaque, nivel + 1);
     }
 
     /// <summary>Tema do Windows (Configurações › Personalização › Cores › "Modo do aplicativo").</summary>

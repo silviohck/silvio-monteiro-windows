@@ -16,6 +16,7 @@ public static class Capturas
     public static void Executar(Application app, string saida)
     {
         Directory.CreateDirectory(saida);
+        app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
         var erros = new List<string>();
         app.DispatcherUnhandledException += (_, e) => { erros.Add(e.Exception.ToString()); e.Handled = true; };
         var raiz = Path.Combine(Path.GetTempPath(), "orthck-demo-" + Guid.NewGuid().ToString("N"));
@@ -81,7 +82,8 @@ public static class Capturas
             {
                 await Esperar();
                 var alvo = w ?? janela;
-                var conteudo = (FrameworkElement)alvo.Content;
+                // A raiz visual da janela inclui a camada de adornos (textos de exemplo nas caixas).
+                var conteudo = (FrameworkElement)VisualTreeHelper.GetChild(alvo, 0);
                 var largura = (int)Math.Ceiling(conteudo.ActualWidth); var altura = (int)Math.Ceiling(conteudo.ActualHeight);
                 var bmp = new RenderTargetBitmap(Math.Max(largura, 1), Math.Max(altura, 1), 96, 96, PixelFormats.Pbgra32);
                 var fundo = new DrawingVisual();

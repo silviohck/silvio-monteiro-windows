@@ -76,8 +76,8 @@ public sealed class ListaDetalhe : Grid
         var esquerda = new Border { Child = doca };
         esquerda.SetResourceReference(Border.BackgroundProperty, Tema.Lateral);
         Children.Add(esquerda);
-        var divisor = new GridSplitter { Width = 1, HorizontalAlignment = HorizontalAlignment.Stretch, ResizeBehavior = GridResizeBehavior.PreviousAndNext };
-        divisor.SetResourceReference(BackgroundProperty, Tema.Borda);
+        var divisor = new Border { Width = 1 };
+        divisor.SetResourceReference(Border.BackgroundProperty, Tema.Borda);
         SetColumn(divisor, 1);
         Children.Add(divisor);
         SetColumn(_detalhe, 2);

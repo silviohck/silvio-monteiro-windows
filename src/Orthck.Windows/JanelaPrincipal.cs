@@ -48,7 +48,9 @@ public sealed class JanelaPrincipal : Window
         try { Icon = new BitmapImage(new Uri("pack://application:,,,/Recursos/Orthck.png")); } catch { }
 
         var grade = new Grid();
-        grade.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(250) });
+        var colunaLateral = new ColumnDefinition();
+        colunaLateral.SetResourceReference(ColumnDefinition.WidthProperty, Tema.LarguraLateral);
+        grade.ColumnDefinitions.Add(colunaLateral);
         grade.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         var lateral = MontarLateral();
         grade.Children.Add(lateral);
@@ -99,14 +101,14 @@ public sealed class JanelaPrincipal : Window
             {
                 _contagemFila = Ui.Texto("", Estilo.Legenda, Tema.TextoNoDestaque);
                 _contagemFila.FontWeight = FontWeights.SemiBold;
-                var bolha = new Border { Child = _contagemFila, CornerRadius = new CornerRadius(9), Padding = new Thickness(7, 1, 7, 1), VerticalAlignment = VerticalAlignment.Center };
+                var bolha = new Border { Child = _contagemFila, CornerRadius = new CornerRadius(9), Padding = new Thickness(7, 1, 7, 1), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) };
                 bolha.SetResourceReference(Border.BackgroundProperty, Tema.Destaque);
                 bolha.SetBinding(VisibilityProperty, new System.Windows.Data.Binding("Text") { Source = _contagemFila, Converter = new VisivelSeTexto() });
                 DockPanel.SetDock(bolha, Dock.Right);
                 linha.Children.Add(bolha);
             }
             linha.Children.Add(Ui.Texto(titulo));
-            _navegacao.Items.Add(new ListBoxItem { Content = linha, Tag = secao, Padding = new Thickness(10, 7, 10, 7) });
+            _navegacao.Items.Add(new ListBoxItem { Content = linha, Tag = secao, Padding = new Thickness(10, 7, 10, 7), HorizontalContentAlignment = HorizontalAlignment.Stretch });
         }
         _navegacao.Margin = new Thickness(8, 10, 8, 10);
         _navegacao.SelectionChanged += (_, _) => { if (_navegacao.SelectedItem is ListBoxItem { Tag: Secao s } && s != SecaoAtual) Mostrar(s); };
