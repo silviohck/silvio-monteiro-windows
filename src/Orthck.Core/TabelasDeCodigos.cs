@@ -28,7 +28,7 @@ public sealed class CodigoDaTabela
     }
 }
 
-/// <summary>Tabela de códigos embutida no app (funciona sem internet): CID-10, SIGTAP ou TUSS — as mesmas do Mac.</summary>
+/// <summary>Tabela de códigos embutida no app (funciona sem internet): CID-10 ou SIGTAP — as mesmas do Mac.</summary>
 public sealed class TabelaDeCodigos
 {
     public required string Nome { get; init; }
@@ -58,10 +58,8 @@ public sealed class TabelaDeCodigos
 
     private static readonly Lazy<TabelaDeCodigos> _cid10 = new(CriarCid10);
     private static readonly Lazy<TabelaDeCodigos> _sigtap = new(CriarSigtap);
-    private static readonly Lazy<TabelaDeCodigos> _tuss = new(CriarTuss);
     public static TabelaDeCodigos Cid10 => _cid10.Value;
     public static TabelaDeCodigos Sigtap => _sigtap.Value;
-    public static TabelaDeCodigos Tuss => _tuss.Value;
 
     private static IEnumerable<string[]> Linhas(string recurso, int partes)
     {
@@ -125,20 +123,6 @@ public sealed class TabelaDeCodigos
             Nome = "SIGTAP",
             Fonte = competencia.Length == 0 ? "Tabela de Procedimentos do SUS (DATASUS)" : $"Tabela de Procedimentos do SUS (DATASUS), competência {competencia}",
             NomeDoGrupo = "grupo", Grupos = grupos, Codigos = codigos, ExemploDeBusca = "03.01.01.007-2, consulta, artroplastia joelho"
-        };
-    }
-
-    /// <summary>TUSS (ANS), tabela 22: procedimentos e eventos em saúde.</summary>
-    private static TabelaDeCodigos CriarTuss()
-    {
-        var versao = Versao("tuss");
-        return new TabelaDeCodigos
-        {
-            Nome = "TUSS",
-            Fonte = versao.Length == 0 ? "TUSS da ANS, tabela 22 (procedimentos e eventos em saúde)" : $"TUSS da ANS, tabela 22 (procedimentos e eventos em saúde), {versao}",
-            NomeDoGrupo = "", Grupos = [],
-            Codigos = Linhas("tuss_procedimentos.txt", 2).Select(c => new CodigoDaTabela(c[0], c[1], 0, false)).ToList(),
-            ExemploDeBusca = "10101012, consulta, ressonância joelho"
         };
     }
 

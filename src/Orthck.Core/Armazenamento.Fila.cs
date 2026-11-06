@@ -19,6 +19,26 @@ public sealed partial class Armazenamento
 
     public int PendentesNaFila => Dados.FilaImpressao.Count(x => x.Situacao == SituacaoImpressao.Pendente);
 
+    /// <summary>Quanto tempo um documento impresso continua aparecendo na fila como "Enviado".</summary>
+    public static readonly TimeSpan TempoNaFilaDepoisDeImprimir = TimeSpan.FromMinutes(2);
+    /// <summary>O mesmo arquivo não é mandado ao Word de novo dentro deste tempo (clique duplo, dois caminhos).</summary>
+    public static readonly TimeSpan IntervaloSemRepetir = TimeSpan.FromSeconds(20);
+    private readonly Dictionary<string, DateTime> _ultimosEnvios = new(StringComparer.OrdinalIgnoreCase);
+    private CancellationTokenSource? _parar;
+
+    /// <summary>Botão "Parar impressões": a fila não manda o próximo documento (o que já está no Word termina).</summary>
+    public void PararFila() => _parar?.Cancel();
+
+    /// <summary>Tira da fila os enviados há mais de 2 minutos (ou sem data, de versões anteriores). Devolve se mudou algo.</summary>
+    public bool LimparEnviadosAntigos(DateTimeOffset? agora = null)
+    {
+        if (ProcessandoFila) return false;
+        var limite = (agora ?? DateTimeOffset.Now) - TempoNaFilaDepoisDeImprimir;
+        var removidos = Dados.FilaImpressao.RemoveAll(x => x.Situacao == SituacaoImpressao.Enviado && (x.EnviadoEm ?? DateTimeOffset.MinValue) <= limite);
+        if (removidos > 0) Salvar();
+        return removidos > 0;
+    }
+
     /// <summary>
     /// Guarda uma referência ao documento, nunca uma cópia do arquivo. Se ele já está aguardando na fila, devolve esse item;
     /// se já foi impresso, entra de novo (ex.: pelo Histórico).
@@ -76,6 +96,8 @@ public sealed partial class Armazenamento
     {
         if (ProcessandoFila) return false;
         ProcessandoFila = true;
+        _parar = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var parar = _parar.Token;
         Mudou?.Invoke();
         try
         {
@@ -84,13 +106,21 @@ public sealed partial class Armazenamento
             var ordem = Dados.FilaImpressao.Where(x => escolhidos.Contains(x.Id) && x.Situacao == SituacaoImpressao.Pendente).Select(x => x.Id).ToList();
             foreach (var id in ordem)
             {
-                if (ct.IsCancellationRequested) break;
+                if (parar.IsCancellationRequested) break;
                 var item = Dados.FilaImpressao.FirstOrDefault(x => x.Id == id);
                 if (item == null || item.Situacao != SituacaoImpressao.Pendente) continue;
                 if (!File.Exists(item.Caminho))
                 {
                     item.Situacao = SituacaoImpressao.Erro;
                     item.Observacao = "Arquivo não encontrado. Confira a pasta antes de tentar novamente.";
+                    Salvar();
+                    continue;
+                }
+                // Proteção contra imprimir duas vezes o mesmo arquivo em seguida.
+                if (_ultimosEnvios.TryGetValue(Path.GetFullPath(item.Caminho), out var enviadoHa) && DateTime.Now - enviadoHa < IntervaloSemRepetir)
+                {
+                    item.Situacao = SituacaoImpressao.Erro;
+                    item.Observacao = "Este arquivo acabou de ser enviado para a impressora; não foi enviado de novo.";
                     Salvar();
                     continue;
                 }
@@ -103,6 +133,7 @@ public sealed partial class Armazenamento
                     item.Situacao = SituacaoImpressao.Pendente;
                     throw;
                 }
+                _ultimosEnvios[Path.GetFullPath(item.Caminho)] = DateTime.Now;
                 ResultadoImpressao resultado;
                 try { resultado = await word.ImprimirAsync(item.Caminho, impressora, item.Copias, manterAberto, ct); }
                 catch (Exception ex) { resultado = new ResultadoImpressao(DesfechoImpressao.Incerto, ex.Message); }
@@ -115,6 +146,8 @@ public sealed partial class Armazenamento
                 item.Observacao = resultado.Desfecho == DesfechoImpressao.Enviado
                     ? "Comando enviado ao Word. Confira o resultado na impressora."
                     : resultado.Detalhe;
+                // Impresso: fica 2 minutos como "Enviado" e depois sai sozinho (LimparEnviadosAntigos).
+                if (resultado.Desfecho == DesfechoImpressao.Enviado) item.EnviadoEm = DateTimeOffset.Now;
                 Salvar();
                 if (resultado.Desfecho == DesfechoImpressao.Incerto) break;
             }
@@ -123,6 +156,8 @@ public sealed partial class Armazenamento
         finally
         {
             ProcessandoFila = false;
+            _parar?.Dispose();
+            _parar = null;
             Mudou?.Invoke();
         }
     }

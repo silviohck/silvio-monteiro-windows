@@ -88,6 +88,27 @@ public sealed partial class Armazenamento
         }
     }
 
+    /// <summary>
+    /// Na hora de gerar: se o arquivo do modelo na pasta sincronizada mudou desde a última cópia (editado no Word e a
+    /// sincronização ainda não passou), copia de novo agora — o documento sai sempre da versão mais nova. Devolve true
+    /// se os campos do modelo mudaram (o formulário precisa ser refeito antes de gerar).
+    /// </summary>
+    public bool AtualizarModeloDaPasta(ModeloDocumento modelo)
+    {
+        if (modelo.Origem == null || Dados.PastaSincronizada.Length == 0) return false;
+        var original = Path.Combine(Dados.PastaSincronizada, modelo.Origem.Replace('/', Path.DirectorySeparatorChar));
+        if (!File.Exists(original)) return false;
+        var modificado = new DateTimeOffset(File.GetLastWriteTimeUtc(original), TimeSpan.Zero);
+        var desatualizado = modelo.OrigemModificadaEm is not { } copiadoEm || Math.Abs((copiadoEm - modificado).TotalSeconds) > 1;
+        if (!desatualizado && File.Exists(UrlDoModelo(modelo))) return false;
+        var camposAntes = modelo.Campos.ToList();
+        try { SubstituirArquivo(modelo, original); }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException) { return false; }
+        modelo.OrigemModificadaEm = modificado;
+        Salvar();
+        return !camposAntes.SequenceEqual(modelo.Campos);
+    }
+
     /// <summary>Relê os campos depois que o modelo foi editado no Word.</summary>
     public void AtualizarCampos(ModeloDocumento modelo)
     {
@@ -277,7 +298,9 @@ public sealed partial class Armazenamento
     public string CaminhoParaNovoDocumento(ModeloDocumento modelo, string subpasta, LocalAtendimento? local, string paciente,
         string? pastaAvulsa = null, DateTime? data = null)
     {
-        var pasta = pastaAvulsa ?? PastaDosDocumentos(subpasta, local);
+        // Os documentos não ficam guardados: vão para uma pasta temporária do app, só para imprimir ou abrir,
+        // e são apagados depois (LimparDocumentosTemporarios). Mesmo comportamento do Mac.
+        var pasta = pastaAvulsa ?? PastaTemporaria;
         Directory.CreateDirectory(pasta);
         var partes = new[] { modelo.Nome, paciente, local?.Nome ?? "", (data ?? DateTime.Now).ToString("dd-MM-yyyy", System.Globalization.CultureInfo.InvariantCulture) };
         var nomeBase = Texto.NomeSeguro(string.Join(" - ", partes.Where(p => p.Trim().Length > 0)));
@@ -291,8 +314,11 @@ public sealed partial class Armazenamento
             var inicio = Math.Max(10, cabe - dataTexto.Length - 3);
             nomeBase = nomeBase[..Math.Min(inicio, nomeBase.Length)].TrimEnd(' ', '-', '.') + " - " + dataTexto;
         }
+        // Nome único também em relação ao Histórico: o Word não abre dois documentos com o mesmo nome e imprimiria
+        // o que já estivesse aberto.
+        var usados = Dados.Historico.Select(d => Path.GetFileName(d.Caminho)).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var destino = Path.Combine(pasta, nomeBase + ".docx");
-        for (var n = 2; File.Exists(destino); n++) destino = Path.Combine(pasta, $"{nomeBase} ({n}).docx");
+        for (var n = 2; File.Exists(destino) || usados.Contains(Path.GetFileName(destino)); n++) destino = Path.Combine(pasta, $"{nomeBase} ({n}).docx");
         return destino;
     }
 }

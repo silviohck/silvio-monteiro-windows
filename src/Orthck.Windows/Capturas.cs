@@ -135,7 +135,6 @@ public static class Capturas
         await Tela(Secao.Historico, "09-historico");
         await Tela(Secao.Cid, "10-cid");
         await Tela(Secao.Sigtap, "11-sigtap");
-        await Tela(Secao.Tuss, "12-tuss");
         await Dialogo(() => new CadastroPacienteJanela(arm, arm.Dados.Pacientes[0]), "13-cadastro-paciente");
         await Dialogo(() => new ExcluirLocalJanela(arm, campina), "14-excluir-local");
         await Dialogo(() => new GerenciarTiposJanela(arm, campina.Id), "15-gerenciar-tipos");
