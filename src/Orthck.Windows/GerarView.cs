@@ -393,13 +393,15 @@ public sealed class GerarView : UserControl
         return Ui.Secao("Paciente", Ui.GPessoa, corpo);
     }
 
-    /// <summary>Pacientes de todos os locais com o trecho digitado; os já atendidos no local escolhido vêm primeiro.</summary>
+    /// <summary>Pacientes com o trecho digitado, só do local escolhido (cadastrados nele ou já atendidos nele); sem local, todos.</summary>
     private List<Paciente> Sugestoes()
     {
         if (NomeDigitado.Length < 2 || Homonimos.Count > 0) return [];
-        var encontrados = Arm.PacientesOrdenados.Where(p => Texto.Contem(p.Nome, NomeDigitado)).ToList();
-        var daqui = encontrados.Where(p => Arm.LocaisDoPaciente(p).Any(l => l.Id == Local?.Id)).ToList();
-        return daqui.Concat(encontrados.Except(daqui)).Take(8).ToList();
+        var local = Local;
+        return Arm.PacientesOrdenados
+            .Where(p => Texto.Contem(p.Nome, NomeDigitado)
+                && (local == null || Arm.LocaisDoPaciente(p).Any(l => l.Id == local.Id)))
+            .Take(8).ToList();
     }
 
     private void AtualizarSituacaoPaciente()
