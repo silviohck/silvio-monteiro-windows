@@ -153,6 +153,44 @@ public static class Impressoras
         try { return LocalPrintServer.GetDefaultPrintQueue().FullName; } catch { return ""; }
     }
 
+    /// <summary>
+    /// Botão "Parar todas as impressões": cancela os trabalhos que já estão no spooler do Windows (na impressora
+    /// escolhida, ou em todas quando é a padrão). Devolve quantos foram cancelados. Trabalhos de outros usuários
+    /// podem exigir permissão de administrador; esses ficam e são contados à parte.
+    /// </summary>
+    public static (int Cancelados, int Falharam) CancelarTudo(string? impressora)
+    {
+        int cancelados = 0, falharam = 0;
+        // Sem impressora escolhida: a padrão do Windows (a mesma que o Word usa).
+        if (string.IsNullOrEmpty(impressora)) impressora = Padrao() is { Length: > 0 } padrao ? padrao : null;
+        try
+        {
+            using var servidor = new LocalPrintServer();
+            foreach (var fila in servidor.GetPrintQueues([EnumeratedPrintQueueTypes.Local, EnumeratedPrintQueueTypes.Connections]))
+            {
+                using (fila)
+                {
+                    if (impressora != null && !string.Equals(fila.FullName, impressora, StringComparison.OrdinalIgnoreCase)) continue;
+                    try
+                    {
+                        fila.Refresh();
+                        foreach (var trabalho in fila.GetPrintJobInfoCollection())
+                        {
+                            using (trabalho)
+                            {
+                                try { trabalho.Cancel(); cancelados++; }
+                                catch { falharam++; }
+                            }
+                        }
+                    }
+                    catch { falharam++; }
+                }
+            }
+        }
+        catch { falharam++; }
+        return (cancelados, falharam);
+    }
+
     /// <summary>Abre Configurações › Bluetooth e dispositivos › Impressoras e scanners.</summary>
     public static void AbrirConfiguracoes() => Ui.Executar(() =>
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("ms-settings:printers") { UseShellExecute = true }));

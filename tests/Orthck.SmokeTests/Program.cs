@@ -103,6 +103,13 @@ try
     Assert(arm.PacientesChamados("jose silva").Count == 2 && Armazenamento.Identificacao(p2) == "nasc. 01/01/1980", "homônimos sem diferenciar acentos e identificação");
     arm.Registrar(new DocumentoGerado { Modelo = "x", Paciente = p1.Nome, PacienteId = p1.Id, Local = "CAMPINA GRANDE" });
     Assert(arm.NomesDosLocais(p1) == "Campina Grande", "locais onde o paciente já foi atendido");
+    // Painel "Atendidos recentemente": por local e por dia, um por paciente.
+    arm.Registrar(new DocumentoGerado { Modelo = "y", Paciente = p1.Nome, PacienteId = p1.Id, Local = "Campina Grande" });
+    Assert(arm.PacientesRecentes(null, null, 12).Count(r => r.Paciente.Id == p1.Id) == 1 && arm.PacientesRecentes(null, null, 12).First().Ultimo.Modelo == "y"
+        && arm.PacientesRecentes("campina grande", DateTime.Today, 12).Any(r => r.Paciente.Id == p1.Id)
+        && arm.PacientesRecentes("Araruna", null, 12).Count == 0 && arm.PacientesRecentes(null, DateTime.Today.AddDays(-3), 12).Count == 0
+        && arm.DocumentosDe(p1).Count == 2 && arm.DiasComAtendimento.SequenceEqual([DateTime.Today]),
+        "atendidos recentemente: um por paciente, filtro de local e de dia, documentos do paciente");
 
     // Pastas dos documentos
     arm.Dados.PastaDocumentos = Path.Combine(raiz, "Documentos"); arm.Salvar();
@@ -115,6 +122,12 @@ try
     Assert(Path.GetFileName(caminho1) == "Receita simples - José- Silva - Campina Grande - 27-10-2026.docx" && caminho2.EndsWith(" (2).docx"),
         "nome do documento com modelo, paciente, local e data; nunca sobrescreve");
     Assert(Path.GetDirectoryName(caminho1) == arm.PastaTemporaria, "documentos gerados vão para a pasta temporária do app");
+    // Nome único também em relação ao Histórico (o Word imprimiria o documento de mesmo nome que já estivesse aberto).
+    var modeloUnico = new ModeloDocumento { Nome = "Unico" };
+    var primeiroUnico = arm.CaminhoParaNovoDocumento(modeloUnico, "", null, "Ana", Path.Combine(raiz, "u1"), new DateTime(2026, 11, 1));
+    arm.Registrar(new DocumentoGerado { Modelo = "Unico", Paciente = "Ana", Caminho = primeiroUnico });
+    var segundoUnico = arm.CaminhoParaNovoDocumento(modeloUnico, "", null, "Ana", Path.Combine(raiz, "u2"), new DateTime(2026, 11, 1));
+    Assert(segundoUnico.EndsWith(" (2).docx"), "nome do documento nunca repete um do Histórico, mesmo em outra pasta");
     var antigo = arm.CaminhoParaNovoDocumento(importado, "Outros", local, "Antigo", data: new DateTime(2026, 10, 1));
     File.WriteAllText(antigo, ""); File.SetLastWriteTime(antigo, DateTime.Now.AddDays(-2));
     File.SetLastWriteTime(caminho1, DateTime.Now.AddDays(-2));
@@ -185,6 +198,18 @@ try
     Assert(arm.Reenfileirar(itens[1].Id) && itens[1].Situacao == SituacaoImpressao.Pendente, "reenvio só com confirmação explícita");
     var novoItem = arm.AdicionarAFila(docs[0], 1);
     Assert(novoItem.Id != itens[0].Id, "documento já enviado volta à fila pelo Histórico");
+    // O mesmo arquivo não vai ao Word duas vezes em 20 segundos (clique duplo, dois caminhos).
+    var enviadosAntes = simulada.Enviados;
+    await arm.ImprimirFilaAsync([novoItem.Id], null, simulada);
+    Assert(simulada.Enviados == enviadosAntes && novoItem.Situacao == SituacaoImpressao.Erro, "mesmo arquivo não é reenviado logo em seguida");
+    arm.RemoverDaFila(novoItem.Id);
+    // Impresso fica 2 minutos na fila e depois sai sozinho.
+    Assert(itens[0].EnviadoEm != null && !arm.LimparEnviadosAntigos(DateTimeOffset.Now.AddMinutes(1)) && arm.Dados.FilaImpressao.Any(x => x.Id == itens[0].Id),
+        "enviado continua na fila por 2 minutos");
+    Assert(arm.LimparEnviadosAntigos(DateTimeOffset.Now.AddMinutes(3)) && !arm.Dados.FilaImpressao.Any(x => x.Id == itens[0].Id)
+        && arm.Dados.FilaImpressao.Any(x => x.Id == itens[1].Id), "depois de 2 minutos o enviado sai; os outros ficam");
+    // Parar sem nada imprimindo não faz nada (e não quebra).
+    arm.PararFila();
     itens[2].Situacao = SituacaoImpressao.Enviando; arm.Salvar();
     Assert(new Armazenamento(pastaDados).Dados.FilaImpressao.Single(x => x.Id == itens[2].Id).Situacao == SituacaoImpressao.Incerto
         && File.ReadAllText(Path.Combine(pastaDados, "dados.json")).Contains("\"incerto\""), "app fechado durante envio: fica incerto e gravado");
@@ -231,6 +256,21 @@ try
     Assert(apac.LocalId == null && apac.Categoria == "1 - APAC / Fisioterapia" && !sync.Dados.Locais.Any(l => l.Nome == "1 - APAC") && !sync.Dados.Modelos.Any(m => m.Nome == "video"),
         "pasta compartilhada vale para todos os locais; ignorada e temporários do Word ficam de fora");
     Assert(sync.ModelosPara(opera).Count == 3 && sync.ModelosPara(null).Count == 1, "modelos de cada local mais os de todos os locais");
+    // Favoritos de cada local, na ordem escolhida; chave do local em maiúsculas como no Mac.
+    sync.AlternarFavorito(rx, opera.Id); sync.AlternarFavorito(apac, opera.Id);
+    Assert(sync.FavoritosPara(opera).Select(m => m.Id).SequenceEqual([rx.Id, apac.Id]) && sync.FavoritosPara(null).Count == 0
+        && sync.Dados.FavoritosPorLocal.ContainsKey(opera.Id.ToString().ToUpperInvariant()) && sync.EhFavorito(rx, opera.Id) && !sync.EhFavorito(apac, null),
+        "favoritos separados por local");
+    sync.MoverFavorito(apac, rx, opera);
+    Assert(sync.FavoritosPara(opera).Select(m => m.Id).SequenceEqual([apac.Id, rx.Id]), "favorito movido para antes de outro");
+    sync.MoverFavorito(apac, null, opera);
+    Assert(sync.FavoritosPara(opera).Select(m => m.Id).SequenceEqual([rx.Id, apac.Id]), "favorito movido para o fim");
+    sync.Dados.FavoritosPorLocal.Clear(); sync.Dados.Favoritos = ["apac fisio"]; sync.Salvar();
+    var migrado = new Armazenamento(sync.Pasta);
+    Assert(migrado.Dados.Favoritos.Count == 0 && migrado.Dados.FavoritosPorLocal[""].SequenceEqual(["apac fisio"])
+        && migrado.Dados.FavoritosPorLocal[opera.Id.ToString().ToUpperInvariant()].SequenceEqual(["apac fisio"]),
+        "favoritos de versões anteriores passam para cada local que tem o modelo");
+    sync.Dados.FavoritosPorLocal = migrado.Dados.FavoritosPorLocal; sync.Dados.Favoritos = [];
     var copiaAntiga = sync.UrlDoModelo(rx);
     File.SetLastWriteTimeUtc(rx.Origem!.Split('/').Aggregate(pastaSync, Path.Combine), DateTime.UtcNow.AddMinutes(5));
     File.Delete(Path.Combine(pastaSync, "OPERA PB", "Laudos", "laudo.docx"));
@@ -245,6 +285,14 @@ try
     await sync.CompactarPastaSincronizadaAsync(zip);
     using (var z = ZipFile.OpenRead(zip))
         Assert(z.Entries.Any(e => e.FullName.EndsWith("Orthck - dados (backup).json")) && !z.Entries.Any(e => e.Name.StartsWith("~$")), "compactar pasta leva os dados e deixa os temporários");
+    // Modelo editado no Word antes da sincronização: na hora de gerar, a cópia é atualizada.
+    var originalRx = rx.Origem!.Split('/').Aggregate(pastaSync, Path.Combine);
+    Assert(!sync.AtualizarModeloDaPasta(rx), "modelo em dia não é copiado de novo");
+    File.Delete(originalRx);
+    CriarDocx(originalRx, "<w:p><w:r><w:t>{{NOME}} {{LADO}}</w:t></w:r></w:p>");
+    File.SetLastWriteTimeUtc(originalRx, DateTime.UtcNow.AddMinutes(10));
+    Assert(sync.AtualizarModeloDaPasta(rx) && rx.Campos.Contains("LADO") && !sync.AtualizarModeloDaPasta(rx),
+        "modelo alterado na pasta é copiado de novo na hora de gerar e avisa que os campos mudaram");
 
     // ===== Subpastas em níveis =====
     var arvore = NoSubpasta.Arvore(["RX / Joelho", "1 - APAC / Fisioterapia / coluna", "RX", "1 - APAC / Fisioterapia", "10 - Laudos", "2 - Receitas"]);
@@ -254,8 +302,8 @@ try
         "árvore de subpastas em ordem do Explorador, com pastas que têm modelos próprios");
 
     // ===== Tabelas =====
-    Assert(TabelaDeCodigos.Cid10.Codigos.Count == 14233 && TabelaDeCodigos.Sigtap.Codigos.Count(c => !c.EhTitulo) == 5039 && TabelaDeCodigos.Tuss.Codigos.Count == 5966,
-        "tabelas CID-10, SIGTAP e TUSS embutidas completas");
+    Assert(TabelaDeCodigos.Cid10.Codigos.Count == 14233 && TabelaDeCodigos.Sigtap.Codigos.Count(c => !c.EhTitulo) == 5039,
+        "tabelas CID-10 e SIGTAP embutidas completas (a TUSS saiu, como no Mac)");
     Assert(TabelaDeCodigos.Cid10.Buscar("m545", null).First().Codigo == "M54.5" && TabelaDeCodigos.Cid10.Buscar("dor lombar", null).Any(c => c.Codigo == "M54.5"),
         "CID: busca por código sem pontuação e por palavras");
     Assert(TabelaDeCodigos.Cid10.Buscar("colera", null).First().Descricao == "Cólera" && TabelaDeCodigos.Cid10.Grupos.Count == 22, "CID: sem acentos e 22 capítulos");

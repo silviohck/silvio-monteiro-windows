@@ -50,6 +50,7 @@ public sealed partial class Armazenamento
         Pasta = pasta ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Orthck");
         Directory.CreateDirectory(PastaModelos);
         Carregar();
+        if (SepararFavoritosPorLocal()) { try { Salvar(); } catch { } }
         LimparDocumentosTemporarios();
     }
 

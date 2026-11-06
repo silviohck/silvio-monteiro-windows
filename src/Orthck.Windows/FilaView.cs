@@ -61,7 +61,8 @@ public sealed class FilaView : UserControl
         var titulo = Ui.TituloSecao("Fila de impressão", Ui.GImpressora);
         titulo.Margin = new Thickness(0);
         UIElement direita = Arm.ProcessandoFila
-            ? Ui.Linha(8, new ProgressBar { IsIndeterminate = true, Width = 80, Height = 4, VerticalAlignment = VerticalAlignment.Center }, Ui.Texto("Imprimindo um por vez…", Estilo.Normal, Tema.TextoSecundario))
+            ? Ui.Linha(8, new ProgressBar { IsIndeterminate = true, Width = 80, Height = 4, VerticalAlignment = VerticalAlignment.Center }, Ui.Texto("Imprimindo um por vez…", Estilo.Normal, Tema.TextoSecundario),
+                Ui.Botao("Parar", _janela.PararImpressoes, glifo: Ui.GParar, dica: "Parar todas as impressões"))
             : new TextBlock();
         p.Add(Ui.Extremos(titulo, direita));
         var pendentes = Pendentes;
@@ -267,7 +268,7 @@ public sealed class HistoricoView : UserControl
     }
 }
 
-/// <summary>Pesquisa numa tabela completa (CID-10, SIGTAP, TUSS), com cópia do código (TabelaCodigosView do Mac).</summary>
+/// <summary>Pesquisa numa tabela completa (CID-10, SIGTAP), com cópia do código (TabelaCodigosView do Mac).</summary>
 public sealed class TabelaCodigosView : UserControl
 {
     private readonly TabelaDeCodigos _tabela;
