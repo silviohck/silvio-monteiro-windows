@@ -277,7 +277,9 @@ public sealed partial class Armazenamento
     public string CaminhoParaNovoDocumento(ModeloDocumento modelo, string subpasta, LocalAtendimento? local, string paciente,
         string? pastaAvulsa = null, DateTime? data = null)
     {
-        var pasta = pastaAvulsa ?? PastaDosDocumentos(subpasta, local);
+        // Os documentos não ficam guardados: vão para uma pasta temporária do app, só para imprimir ou abrir,
+        // e são apagados depois (LimparDocumentosTemporarios). Mesmo comportamento do Mac.
+        var pasta = pastaAvulsa ?? PastaTemporaria;
         Directory.CreateDirectory(pasta);
         var partes = new[] { modelo.Nome, paciente, local?.Nome ?? "", (data ?? DateTime.Now).ToString("dd-MM-yyyy", System.Globalization.CultureInfo.InvariantCulture) };
         var nomeBase = Texto.NomeSeguro(string.Join(" - ", partes.Where(p => p.Trim().Length > 0)));

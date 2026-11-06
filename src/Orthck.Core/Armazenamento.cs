@@ -30,6 +30,10 @@ public sealed partial class Armazenamento
     public string Pasta { get; }
     public string PastaModelos => Path.Combine(Pasta, "Modelos");
     public string PastaBackups => Path.Combine(Pasta, "Backups");
+    /// <summary>Documentos gerados: ficam aqui só o tempo de imprimir ou abrir (ver LimparDocumentosTemporarios).</summary>
+    public string PastaTemporaria => Path.Combine(Pasta, "Documentos gerados");
+    /// <summary>Quanto tempo um documento gerado fica na pasta temporária antes de ser apagado.</summary>
+    public static readonly TimeSpan TempoDosDocumentosTemporarios = TimeSpan.FromHours(12);
     public string ArquivoDados => Path.Combine(Pasta, "dados.json");
     public DadosApp Dados { get; private set; } = new();
 
@@ -46,6 +50,24 @@ public sealed partial class Armazenamento
         Pasta = pasta ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Orthck");
         Directory.CreateDirectory(PastaModelos);
         Carregar();
+        LimparDocumentosTemporarios();
+    }
+
+    /// <summary>Apaga os documentos gerados há mais de 12 horas, menos os que ainda esperam na fila de impressão.
+    /// O Histórico continua registrando o que foi gerado (sem o arquivo para abrir de novo).</summary>
+    public void LimparDocumentosTemporarios(DateTime? agora = null)
+    {
+        if (!Directory.Exists(PastaTemporaria)) return;
+        var naFila = Dados.FilaImpressao.Where(i => i.Situacao != SituacaoImpressao.Enviado)
+            .Select(i => Path.GetFullPath(i.Caminho)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var limite = (agora ?? DateTime.Now) - TempoDosDocumentosTemporarios;
+        foreach (var arquivo in Directory.GetFiles(PastaTemporaria))
+        {
+            if (naFila.Contains(Path.GetFullPath(arquivo))) continue;
+            try { if (File.GetLastWriteTime(arquivo) < limite) File.Delete(arquivo); }
+            catch (IOException) { } // aberto no Word: fica para a próxima limpeza
+            catch (UnauthorizedAccessException) { }
+        }
     }
 
     // MARK: Disco

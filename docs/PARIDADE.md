@@ -15,7 +15,10 @@ Atualizada em 28/10/2026, após a reescrita a partir do código do Mac (PR #6).
 | Atalhos de pasta (alias do Finder) | Atalhos `.lnk` do Windows | Testar no Windows real |
 | Modelos .doc/.rtf/.odt | Convertidos pelo Word (COM) | Testar no Windows real |
 | Tipos por local (criar, renomear, excluir, ordem alfabética) | Igual | — |
-| Gerar documento: quadro do local, documento pronto, subpasta em níveis, pasta principal/do local/só este documento, abrir ao gerar, nome copiado | Igual | — |
+| Gerar documento: quadro do local, documento pronto, subpasta em níveis, abrir ao gerar, nome copiado | Igual | — |
+| Documentos não ficam guardados: pasta temporária do app (Documentos gerados), apagados após 12 h, menos os da fila; "Só abrir" | Igual (06/11/2026) | — |
+| Sugestões de pacientes só do local escolhido | Igual (06/11/2026) | — |
+| Sugestões de CID só em campos de CID (não em {{CIDADE}}) | Igual (06/11/2026) | — |
 | Pacientes: sugestões com locais, homônimos, "é outro paciente", cadastro a partir do Gerar | Igual | Mesclar cadastros (não existe no Mac) |
 | Locais: pasta própria, excluir transferindo/desvinculando | Igual (Windows também edita cidade, endereço, telefone, e-mail e CNPJ) | — |
 | Histórico: abrir, mostrar na pasta, imprimir, pôr na fila, remover, limpar | Igual + busca | — |

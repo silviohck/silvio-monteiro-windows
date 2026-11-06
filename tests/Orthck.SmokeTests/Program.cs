@@ -114,6 +114,14 @@ try
     var caminho2 = arm.CaminhoParaNovoDocumento(importado, "Outros", local, "José: Silva", data: new DateTime(2026, 10, 27));
     Assert(Path.GetFileName(caminho1) == "Receita simples - José- Silva - Campina Grande - 27-10-2026.docx" && caminho2.EndsWith(" (2).docx"),
         "nome do documento com modelo, paciente, local e data; nunca sobrescreve");
+    Assert(Path.GetDirectoryName(caminho1) == arm.PastaTemporaria, "documentos gerados vão para a pasta temporária do app");
+    var antigo = arm.CaminhoParaNovoDocumento(importado, "Outros", local, "Antigo", data: new DateTime(2026, 10, 1));
+    File.WriteAllText(antigo, ""); File.SetLastWriteTime(antigo, DateTime.Now.AddDays(-2));
+    File.SetLastWriteTime(caminho1, DateTime.Now.AddDays(-2));
+    arm.Dados.FilaImpressao.Add(new ItemFilaImpressao { Caminho = caminho1, Situacao = SituacaoImpressao.Pendente });
+    arm.LimparDocumentosTemporarios();
+    Assert(!File.Exists(antigo) && File.Exists(caminho1), "limpeza apaga os antigos e mantém os que esperam na fila");
+    arm.Dados.FilaImpressao.Clear();
     Assert(Texto.NomeSeguro("CON") == "_CON" && Texto.NomeSeguro("a/b:c") == "a-b-c", "nomes reservados e inválidos do Windows");
 
     // Excluir local transferindo vínculos

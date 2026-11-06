@@ -26,7 +26,6 @@ public sealed class GerarView : UserControl
     private string? _aviso;
     private string? _ultimoDocumento;
     private bool _geracaoConcluida;
-    private string? _pastaAvulsa;
     private bool _imprimindo;
     private bool _ignorarNome;
 
@@ -204,7 +203,6 @@ public sealed class GerarView : UserControl
         _pacienteEscolhido = null;
         _outroPaciente = false;
         _nascimentoDoNovo.Text = "";
-        _pastaAvulsa = null;
         _ignorarNome = true; _nome.Text = ""; _ignorarNome = false;
         RecomecarAtendimento();
         _copias = Modelo?.Copias ?? 1;
@@ -560,73 +558,17 @@ public sealed class GerarView : UserControl
 
     // MARK: Salvar e imprimir
 
-    private string PastaDeDestino => _pastaAvulsa ?? Arm.PastaDosDocumentos(Modelo?.Categoria ?? _subpasta, Local);
-
-    /// <summary>"Pastas já existentes" ou quais serão criadas.</summary>
-    private string SituacaoDasPastas()
-    {
-        var pastaDoLocal = Arm.PastaDoLocal(Local);
-        var novas = new List<string>();
-        if (!Directory.Exists(pastaDoLocal)) novas.Add($"“{Path.GetFileName(pastaDoLocal)}”");
-        if (PastaDeDestino != pastaDoLocal && !Directory.Exists(PastaDeDestino)) novas.Add($"“{Path.GetFileName(PastaDeDestino)}”");
-        return novas.Count == 0 ? "Pasta do local e do tipo já existem; o arquivo vai direto para lá." : "Será criada ao gerar: " + string.Join(" e ", novas) + ".";
-    }
-
     private void AtualizarSecaoSalvar()
     {
         if (Modelo is not { } modelo) { _secaoSalvar.Content = null; return; }
         var corpo = Ui.Coluna(12);
 
-        var destino = Ui.Coluna(4);
-        var titulo = Ui.Linha(6, Ui.Texto("Será salvo em"));
-        if (_pastaAvulsa != null) titulo.Add(Ui.Texto("(só este documento)", Estilo.Legenda));
-        destino.Add(titulo);
-        var caminho = Ui.Texto(Ui.CaminhoAbreviado(PastaDeDestino), Estilo.Normal, Tema.TextoSecundario);
-        caminho.ToolTip = PastaDeDestino;
-        destino.Add(caminho);
-        if (_pastaAvulsa == null) destino.Add(Ui.Texto(SituacaoDasPastas(), Estilo.Legenda));
-
-        var maisOpcoes = new Button { Content = Ui.ConteudoDoBotao("Mais opções", Ui.GSetaBaixo), Padding = new Thickness(14, 7, 14, 7), MinHeight = 34 };
-        var menu = new ContextMenu { PlacementTarget = maisOpcoes, Placement = PlacementMode.Bottom };
-        if (Local is { } local)
-        {
-            var nomeDoLocal = local.Nome.Length == 0 ? "este local" : local.Nome;
-            menu.Items.Add(ItemDeMenu($"Usar outra pasta só para {nomeDoLocal}…", () =>
-            {
-                if (Ui.EscolherPasta($"Escolha a pasta de {nomeDoLocal}. Se ela não tiver o nome do local, o app cria a pasta do local dentro dela.") is { } pasta)
-                {
-                    local.Pasta = pasta; Arm.Salvar(); _pastaAvulsa = null; AtualizarSecaoSalvar();
-                }
-            }));
-            if (local.Pasta.Length > 0)
-                menu.Items.Add(ItemDeMenu("Voltar a usar a pasta principal", () => { local.Pasta = ""; Arm.Salvar(); AtualizarSecaoSalvar(); }));
-        }
-        menu.Items.Add(ItemDeMenu("Só este documento…", () => { _pastaAvulsa = Ui.EscolherPasta("Escolha onde salvar só este documento."); AtualizarSecaoSalvar(); }));
-        if (_pastaAvulsa != null) menu.Items.Add(ItemDeMenu("Voltar para a pasta do local", () => { _pastaAvulsa = null; AtualizarSecaoSalvar(); }));
-        maisOpcoes.Click += (_, _) => menu.IsOpen = true;
-
-        var botoesPasta = new WrapPanel { Tag = 8.0 };
-        botoesPasta.Add(Ui.Botao("Escolher pasta principal…", () =>
-        {
-            if (Ui.EscolherPasta("Escolha a pasta principal. Dentro dela, o app usa (ou cria) uma pasta para cada local e, dentro desta, uma pasta para cada tipo de documento.") is not { } pasta) return;
-            Arm.Dados.PastaDocumentos = pasta;
-            // A pasta principal passa a valer também para este local.
-            if (Local is { Pasta.Length: > 0 } l) l.Pasta = "";
-            Arm.Salvar();
-            _pastaAvulsa = null;
-            AtualizarSecaoSalvar();
-        }, glifo: Ui.GPasta));
-        botoesPasta.Add(maisOpcoes);
-        botoesPasta.Add(Ui.Botao("Abrir no Explorador", () => Ui.AbrirPasta(PastaDeDestino), glifo: Ui.GPastaAberta));
-        destino.Add(botoesPasta, 8);
-        corpo.Add(destino);
-        corpo.Add(Ui.Divisor());
 
         var abrir = new CheckBox { Content = "Abrir o documento depois de gerar", IsChecked = Ajustes.Atual.AbrirAoGerar };
         abrir.Click += (_, _) => { Ajustes.Atual.AbrirAoGerar = abrir.IsChecked == true; Ajustes.Salvar(); };
         corpo.Add(abrir);
 
-        var acao = Ui.Escolha([("Adicionar à fila de impressão", "fila"), ("Imprimir agora", "imprimir"), ("Só salvar", "salvar")], Ajustes.Atual.AcaoDepoisDeGerar,
+        var acao = Ui.Escolha([("Adicionar à fila de impressão", "fila"), ("Imprimir agora", "imprimir"), ("Só abrir", "salvar")], Ajustes.Atual.AcaoDepoisDeGerar,
             v => { Ajustes.Atual.AcaoDepoisDeGerar = v; Ajustes.Salvar(); AtualizarSecaoSalvar(); }, 260);
         var copias = SeletorDeCopias(_copias, v => _copias = v, "Quantas cópias guardar na fila ou enviar à impressora");
         corpo.Add(Ui.Extremos(Ui.Rotulado("Depois de gerar", acao, 150), copias));
@@ -662,13 +604,6 @@ public sealed class GerarView : UserControl
         corpo.Add(Ui.Divisor());
         corpo.Add(Ui.Extremos(aviso, direita));
         _secaoSalvar.Content = Ui.Secao("Salvar e imprimir", Ui.GSalvar, corpo);
-    }
-
-    private static MenuItem ItemDeMenu(string titulo, Action acao)
-    {
-        var item = new MenuItem { Header = titulo };
-        item.Click += (_, _) => Ui.Executar(acao);
-        return item;
     }
 
     /// <summary>"− 2 cópias +" (Stepper do Mac), de 1 a 20.</summary>
@@ -721,7 +656,7 @@ public sealed class GerarView : UserControl
         string destino;
         try
         {
-            destino = Arm.CaminhoParaNovoDocumento(modelo, modelo.Categoria, Local, nome, _pastaAvulsa);
+            destino = Arm.CaminhoParaNovoDocumento(modelo, modelo.Categoria, Local, nome);
             DocxTemplate.Fill(Arm.UrlDoModelo(modelo), destino, valoresFinais);
         }
         catch (Exception ex)
@@ -756,7 +691,6 @@ public sealed class GerarView : UserControl
         if (nome.Length > 0) { try { Clipboard.SetText(nome); copiado = " · nome copiado"; } catch { } }
         _aviso = $"Salvo: {Path.GetFileName(destino)}{copiado}";
         _ultimoDocumento = destino;
-        _pastaAvulsa = null;
         var acao = Ajustes.Atual.AcaoDepoisDeGerar;
         ItemFilaImpressao? item = null;
         if (acao is "fila" or "imprimir")
@@ -769,7 +703,9 @@ public sealed class GerarView : UserControl
             if (acao == "imprimir" && jaImprimindo) item = null;
         }
         Atualizar();
-        if (Ajustes.Atual.AbrirAoGerar) Ui.Abrir(destino);
+        // "Só abrir" abre sempre: o documento não fica guardado, é para usar agora.
+        if (Ajustes.Atual.AbrirAoGerar || acao == "salvar") Ui.Abrir(destino);
+        Arm.LimparDocumentosTemporarios();
         if (item != null && acao == "imprimir")
         {
             _imprimindo = true; AtualizarSecaoSalvar();
