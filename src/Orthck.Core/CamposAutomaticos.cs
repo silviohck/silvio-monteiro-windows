@@ -92,12 +92,11 @@ public static class CamposAutomaticos
         return anos >= 0 ? anos : null;
     }
 
-    /// <summary>{{CID}}, {{CID_PRINCIPAL}}, {{CID2}}, {{OUTRO_CID}}…</summary>
-    public static bool EhCampoCid(string campo)
-    {
-        var chave = Chave(campo);
-        return chave.StartsWith("CID") || chave.EndsWith("_CID");
-    }
+    /// <summary>{{CID}}, {{CID_PRINCIPAL}}, {{CID2}}, {{OUTRO_CID}}… A palavra CID inteira ou seguida de número:
+    /// não basta começar com "CID" ({{CIDADE}} não é campo de CID).</summary>
+    public static bool EhCampoCid(string campo) =>
+        Chave(campo).Split('_').Any(parte =>
+            parte == "CID" || (parte.StartsWith("CID") && parte.Length > 3 && parte[3..].All(char.IsDigit)));
 
     /// <summary>De onde vem o valor do campo, para mostrar na aba Modelos.</summary>
     public static string Descricao(string campo) => OrigemDe(campo) switch

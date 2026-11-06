@@ -62,6 +62,9 @@ try
         "data por extenso e dados do local");
     Assert(CamposAutomaticos.Valor("CID", maria, clinica, dia) == null && CamposAutomaticos.EhCampoCid("CID_PRINCIPAL") && CamposAutomaticos.EhCampoCid("outro cid"),
         "CID é digitado na hora e recebe sugestões");
+    Assert(CamposAutomaticos.EhCampoCid("CID") && CamposAutomaticos.EhCampoCid("CID2")
+        && !CamposAutomaticos.EhCampoCid("CIDADE") && !CamposAutomaticos.EhCampoCid("LOCAL_CIDADE"),
+        "CIDADE não é campo de CID (sem sugestões da tabela CID-10)");
     var paciente = new Paciente { Nome = "Maria" };
     CamposAutomaticos.Guardar(new Dictionary<string, string> { ["CPF"] = " 111 ", ["CID"] = "M17.1", ["CONDUTA"] = "repouso" }, ["CPF", "CID", "CONDUTA"], paciente);
     Assert(paciente.Cpf == "111" && JsonSerializer.Serialize(paciente).Contains("M17.1") == false, "só dados gerais ficam no cadastro (CID e conduta não)");
