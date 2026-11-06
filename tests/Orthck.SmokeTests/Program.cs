@@ -208,6 +208,8 @@ try
         "enviado continua na fila por 2 minutos");
     Assert(arm.LimparEnviadosAntigos(DateTimeOffset.Now.AddMinutes(3)) && !arm.Dados.FilaImpressao.Any(x => x.Id == itens[0].Id)
         && arm.Dados.FilaImpressao.Any(x => x.Id == itens[1].Id), "depois de 2 minutos o enviado sai; os outros ficam");
+    // O teste seguinte usa o item 3 (também enviado e retirado acima): volta para a fila.
+    if (!arm.Dados.FilaImpressao.Contains(itens[2])) arm.Dados.FilaImpressao.Add(itens[2]);
     // Parar sem nada imprimindo não faz nada (e não quebra).
     arm.PararFila();
     itens[2].Situacao = SituacaoImpressao.Enviando; arm.Salvar();
