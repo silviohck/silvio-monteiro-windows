@@ -250,7 +250,7 @@ public sealed class JanelaPrincipal : Window
             dica: "Traz pacientes, locais, histórico e fila de um backup (dados.json ou “Orthck - dados (backup).json”)")));
         if (temPasta)
         {
-            var enviar = Largo(Ui.Botao(Arm.EnviandoPastaAoDrive ? "Enviando…" : "Enviar pasta ao Google Drive", () => Ui.ExecutarAsync(EnviarPastaAoDrive), glifo: Ui.GEnviar,
+            var enviar = Largo(Ui.Botao(Arm.EnviandoPastaAoDrive ? "Enviando…" : "Enviar pasta ao Drive", () => Ui.ExecutarAsync(EnviarPastaAoDrive), glifo: Ui.GEnviar,
                 dica: "Manda ao Google Drive um .zip com a pasta sincronizada inteira e os dados do app (substitui o anterior)"));
             enviar.IsEnabled = !Arm.EnviandoPastaAoDrive;
             backup.Add(enviar);

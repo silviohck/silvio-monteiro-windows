@@ -606,12 +606,9 @@ public sealed class ProntuarioView : UserControl
     {
         var corpo = Ui.Coluna(8);
         corpo.Add(Solto(_favoritos));
-        var linha = new DockPanel();
-        DockPanel.SetDock(_lados, Dock.Right);
-        _lados.Margin = new Thickness(10, 0, 0, 0);
-        linha.Children.Add(Solto(_lados));
-        linha.Children.Add(Solto(_buscaModelo));
-        corpo.Add(linha);
+        corpo.Add(Solto(_buscaModelo));
+        _lados.HorizontalAlignment = HorizontalAlignment.Left;
+        corpo.Add(Ui.Rotulado("Lado", Solto(_lados), 70));
         corpo.Add(Solto(_resultados));
         return Ui.Secao("Modelos de atendimento do app", Ui.GLista, corpo,
             "A estrela põe o modelo nos favoritos deste local (atalhos acima da busca). Escolha o lado e clique no modelo: Q.P., H.D.A., exame físico, diagnóstico, CID e programação são preenchidos nas linhas da ficha. Complete os ___ e ajuste o que precisar. Os textos são pontos de partida.");
@@ -806,7 +803,8 @@ public sealed class ProntuarioView : UserControl
         p.Add(copias);
         var lacunas = new CheckBox
         {
-            Content = "Tirar os ___ não preenchidos", IsChecked = Ajustes.Atual.TirarLacunas,
+            // Texto num TextBlock: num Content de texto, o WPF trata "_" como tecla de atalho e mostraria só um traço.
+            Content = new TextBlock { Text = "Tirar os ___ não preenchidos" }, IsChecked = Ajustes.Atual.TirarLacunas,
             ToolTip = "Ao gerar, os ___ que ficaram sem preencher saem do documento (\"HÁ ___\" some; \"DERRAME ___\" sai inteiro). Desligado, saem impressos como linha para escrever à mão."
         };
         lacunas.Click += (_, _) => { Ajustes.Atual.TirarLacunas = lacunas.IsChecked == true; Ajustes.Salvar(); };
