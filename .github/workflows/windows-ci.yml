@@ -25,6 +25,11 @@ jobs:
       # Um único Orthck.exe com o .NET e o WPF dentro: copiar e abrir, sem instalar nada.
       # x64 também roda no Windows 11 de Macs com chip Apple (emulação).
       - name: Publicar Orthck.exe (arquivo único)
+        # Credencial do Google Drive (como no Mac): com os Secrets GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET, conectar
+        # pede só o login no navegador; sem eles, o app pede o arquivo client_secret….json.
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: >
           dotnet publish src/Orthck.Windows/Orthck.Windows.csproj -c Release -r win-x64 --self-contained true
           -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true

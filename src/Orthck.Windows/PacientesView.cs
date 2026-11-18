@@ -161,7 +161,13 @@ public sealed class PacienteEditor : StackPanel
         var endereco = Caixa(paciente.Endereco, "", v => paciente.Endereco = v);
         endereco.TextWrapping = TextWrapping.Wrap; endereco.AcceptsReturn = true; endereco.MaxHeight = 90;
         contato.Add(Ui.Rotulado("Endereço", endereco));
+        contato.Add(Ui.Rotulado("Número", Caixa(paciente.Numero, "", v => paciente.Numero = v)));
+        contato.Add(Ui.Rotulado("Bairro", Caixa(paciente.Bairro, "", v => paciente.Bairro = v)));
+        contato.Add(Ui.Rotulado("Cidade", Caixa(paciente.Cidade, "", v => paciente.Cidade = v)));
+        contato.Add(Ui.Rotulado("UF", Caixa(paciente.Uf, "", v => paciente.Uf = v)));
+        contato.Add(Ui.Rotulado("CEP", Caixa(paciente.Cep, "", v => paciente.Cep = v)));
         contato.Add(Ui.Rotulado("Convênio", Caixa(paciente.Convenio, "", v => paciente.Convenio = v)));
+        contato.Add(Ui.Rotulado("CNS (cartão do SUS)", Caixa(paciente.Cns, "", v => paciente.Cns = v)));
         Children.Add(Ui.Secao("Contato", Ui.GTelefone, contato));
 
         var observacoes = Ui.CaixaDeTexto(paciente.Observacoes, "Observações", multilinha: true);

@@ -123,6 +123,14 @@ public sealed class GerarView : UserControl
             _raiz.Content = _grade;
         }
         if (Local == null && Ajustes.Atual.LocalSelecionado.Length > 0) { Ajustes.Atual.LocalSelecionado = ""; Ajustes.Salvar(); }
+        // O paciente que estava no Prontuário continua aqui.
+        if (_janela.NomeEmAtendimento != _nome.Text)
+        {
+            _ignorarNome = true; _nome.Text = _janela.NomeEmAtendimento; _nome.CaretIndex = _nome.Text.Length; _ignorarNome = false;
+            _pacienteEscolhido = _janela.PacienteEmAtendimento;
+            _outroPaciente = false;
+            RecomecarAtendimento();
+        }
         ValidarModelo();
         if (_valores.Count == 0) Preencher();
         Atualizar();
@@ -132,6 +140,8 @@ public sealed class GerarView : UserControl
     /// <summary>Redesenha as partes que dependem do estado (os campos de texto em uso não são recriados).</summary>
     private void Atualizar()
     {
+        _janela.NomeEmAtendimento = _nome.Text;
+        _janela.PacienteEmAtendimento = PacienteCadastrado?.Id;
         _quadroDoLocal.Content = QuadroDoLocal();
         _documentoPronto.Content = DocumentoPronto();
         _favoritos.Content = Favoritos();
@@ -157,6 +167,8 @@ public sealed class GerarView : UserControl
         if (_pacienteEscolhido is Guid id && !Homonimos.Any(p => p.Id == id)) _pacienteEscolhido = null;
         if (Homonimos.Count == 0) { _outroPaciente = false; _nascimentoDoNovo.Text = ""; }
         RecomecarAtendimento();
+        _janela.NomeEmAtendimento = _nome.Text;
+        _janela.PacienteEmAtendimento = PacienteCadastrado?.Id;
         _documentoPronto.Content = null;
         AtualizarSituacaoPaciente();
         _secaoCampos.Content = Modelo is { } m ? SecaoCampos(m) : null;
@@ -650,7 +662,7 @@ public sealed class GerarView : UserControl
     }
 
     /// <summary>Sugestões da tabela CID-10 logo abaixo de um campo {{CID}}: digite o código ou palavras e clique.</summary>
-    private static FrameworkElement? SugestoesCid(TextBox caixa)
+    internal static FrameworkElement? SugestoesCid(TextBox caixa)
     {
         var termo = caixa.Text.Trim();
         if (termo.Length < 2) return null;
@@ -875,20 +887,33 @@ public sealed class GerarView : UserControl
             p.Add(fila);
         }
 
-        p.Add(Ui.TituloSecao("Atendidos recentemente", Ui.GRelogio));
+        var limpar = Ui.Link("Limpar", () =>
+        {
+            if (!Ui.Confirmar("Limpar a lista de atendidos recentemente?", "Só a lista ao lado fica vazia. Nada é apagado: o Histórico e os cadastros dos pacientes continuam.")) return;
+            Ajustes.Atual.RecentesLimposEm = DateTimeOffset.Now;
+            Ajustes.Atual.RecentesOcultos = [];
+            Ajustes.Salvar();
+            _filtroDia = null;
+            AtualizarPainel();
+        }, estilo: Estilo.Apoio);
+        limpar.ToolTip = "Esvazia esta lista (o Histórico e os cadastros continuam). Pacientes novos voltam a aparecer.";
+        p.Add(Ui.Extremos(Ui.TituloSecao("Atendidos recentemente", Ui.GRelogio), limpar));
         var locais = new List<(string, string)> { ("Todos os locais", "") };
         locais.AddRange(Arm.LocaisOrdenados.Where(l => l.Nome.Length > 0).Select(l => (l.Nome, l.Nome)));
         var filtroLocal = Ajustes.Atual.FiltroLocalRecentes;
         if (filtroLocal.Length > 0 && !locais.Any(l => l.Item2 == filtroLocal)) filtroLocal = "";
         p.Add(Ui.Escolha(locais, filtroLocal, v => { Ajustes.Atual.FiltroLocalRecentes = v; Ajustes.Salvar(); AtualizarPainel(); }, 160));
         var dias = new List<(string, DateTime?)> { ("Todos os dias", null) };
-        dias.AddRange(Arm.DiasComAtendimento.Take(60).Select(d => (d == DateTime.Today ? "Hoje" : d == DateTime.Today.AddDays(-1) ? "Ontem" : d.ToString("dd/MM/yyyy (ddd)", PtBr), (DateTime?)d)));
+        dias.AddRange(Arm.DiasComAtendimentoDesde(Ajustes.Atual.RecentesLimposEm).Take(60).Select(d => (d == DateTime.Today ? "Hoje" : d == DateTime.Today.AddDays(-1) ? "Ontem" : d.ToString("dd/MM/yyyy (ddd)", PtBr), (DateTime?)d)));
         if (_filtroDia != null && !dias.Any(d => d.Item2 == _filtroDia)) _filtroDia = null;
         p.Add(Ui.Escolha(dias, _filtroDia, v => { _filtroDia = v; AtualizarPainel(); }, 160));
 
-        var recentes = Arm.PacientesRecentes(filtroLocal.Length == 0 ? null : filtroLocal, _filtroDia, 12)
+        // Os mais recentes entram na lista (até 12; num dia escolhido, todos); na tela, em ordem alfabética.
+        var recentes = Arm.PacientesRecentes(filtroLocal.Length == 0 ? null : filtroLocal, _filtroDia, _filtroDia == null ? 12 : int.MaxValue,
+                Ajustes.Atual.RecentesLimposEm, Ajustes.Atual.RecentesOcultos)
             .OrderBy(r => r.Paciente.Nome, Texto.Ordem).ToList();
-        if (recentes.Count == 0) p.Add(Ui.Texto("Nenhum paciente atendido com esses filtros.", Estilo.Apoio));
+        if (recentes.Count == 0)
+            p.Add(Ui.Texto(filtroLocal.Length == 0 && _filtroDia == null ? "Os pacientes aparecem aqui depois do primeiro documento gerado." : "Nenhum paciente com esse filtro.", Estilo.Apoio));
         foreach (var (paciente, ultimo) in recentes) p.Add(LinhaDoRecente(paciente, ultimo));
         _painel.Content = p;
     }
@@ -910,6 +935,16 @@ public sealed class GerarView : UserControl
             BorderThickness = new Thickness(0), Padding = new Thickness(4, 3, 4, 3), ToolTip = $"{paciente.Nome}\nUsar este paciente no documento"
         };
         escolher.Click += (_, _) => Ui.Executar(() => EscolherPaciente(paciente));
+        var menu = new ContextMenu();
+        var tirar = new MenuItem { Header = "Tirar desta lista" };
+        tirar.Click += (_, _) => Ui.Executar(() =>
+        {
+            Ajustes.Atual.RecentesOcultos[paciente.Id] = DateTimeOffset.Now;
+            Ajustes.Salvar();
+            AtualizarPainel();
+        });
+        menu.Items.Add(tirar);
+        escolher.ContextMenu = menu;
         var aberto = _abertosNoPainel.Contains(paciente.Id);
         var mostrar = Ui.BotaoIcone(aberto ? Ui.GSetaBaixo : Ui.GProximo, aberto ? "Esconder os documentos" : "Ver os documentos deste paciente",
             () => { if (!_abertosNoPainel.Remove(paciente.Id)) _abertosNoPainel.Add(paciente.Id); AtualizarPainel(); });

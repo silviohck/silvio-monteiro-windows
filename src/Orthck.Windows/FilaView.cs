@@ -81,13 +81,22 @@ public sealed class FilaView : UserControl
         marcados.IsEnabled = marcadosPendentes.Count > 0 && !Arm.ProcessandoFila;
         marcados.Padding = new Thickness(16, 9, 16, 9);
         var esquerda = Ui.Linha(10, todos, marcados);
-        UIElement limpar = new TextBlock();
+        var limpar = Ui.Linha(8);
         if (enviados > 0)
         {
             var b = Ui.Botao("Limpar enviados", Arm.LimparEnviadosDaFila, dica: "Tira da lista os já enviados; os arquivos Word continuam salvos");
             b.IsEnabled = !Arm.ProcessandoFila;
-            limpar = b;
+            limpar.Children.Add(b);
         }
+        var limparFila = Ui.Botao("Limpar fila", () =>
+        {
+            if (!Ui.Confirmar("Limpar a fila de impressão?", "Todos os documentos saem da fila e não serão impressos. Os arquivos Word e o Histórico continuam.", true)) return;
+            Arm.LimparFila();
+            _marcados.Clear();
+        }, glifo: Ui.GLixeira, dica: "Tira todos os documentos da fila (os arquivos Word e o Histórico continuam)");
+        limparFila.IsEnabled = Fila.Count > 0 && !Arm.ProcessandoFila;
+        limparFila.SetResourceReference(ForegroundProperty, Tema.Aviso);
+        limpar.Children.Add(limparFila);
         p.Add(Ui.Extremos(esquerda, limpar));
         return p;
     }

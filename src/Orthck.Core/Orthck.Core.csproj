@@ -6,7 +6,9 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
-    <!-- CID-10, SIGTAP e TUSS embutidos (gerados por tools/gerar_tabelas.py a partir do projeto Mac). -->
+    <!-- CID-10, SIGTAP e modelos de atendimento embutidos (gerados por tools/gerar_tabelas.py a partir do projeto Mac). -->
     <EmbeddedResource Include="Tabelas\*.txt" LogicalName="Orthck.Core.Tabelas.%(Filename)%(Extension)" />
+    <!-- Fichas do Prontuário que vêm com o app (as mesmas do Mac). -->
+    <EmbeddedResource Include="Fichas\*.docx" LogicalName="Orthck.Core.Fichas.%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

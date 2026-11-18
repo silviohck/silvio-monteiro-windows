@@ -26,6 +26,13 @@ public static class CamposAutomaticos
         Registrar(["EMAIL", "E_MAIL"], new(Tipo.Paciente, p => p.Email, GuardarNoPaciente: (p, v) => p.Email = v));
         Registrar(["ENDERECO", "ENDERECO_PACIENTE"], new(Tipo.Paciente, p => p.Endereco, GuardarNoPaciente: (p, v) => p.Endereco = v));
         Registrar(["CONVENIO", "PLANO", "PLANO_DE_SAUDE"], new(Tipo.Paciente, p => p.Convenio, GuardarNoPaciente: (p, v) => p.Convenio = v));
+        Registrar(["NUMERO", "NUMERO_ENDERECO", "NUMERO_DA_CASA"], new(Tipo.Paciente, p => p.Numero, GuardarNoPaciente: (p, v) => p.Numero = v));
+        Registrar(["BAIRRO"], new(Tipo.Paciente, p => p.Bairro, GuardarNoPaciente: (p, v) => p.Bairro = v));
+        // "CIDADE" sozinha continua sendo a cidade do local (documentos antigos); a do paciente tem nome próprio.
+        Registrar(["CIDADE_PACIENTE", "CIDADE_DO_PACIENTE", "MUNICIPIO"], new(Tipo.Paciente, p => p.Cidade, GuardarNoPaciente: (p, v) => p.Cidade = v));
+        Registrar(["UF", "ESTADO"], new(Tipo.Paciente, p => p.Uf, GuardarNoPaciente: (p, v) => p.Uf = v));
+        Registrar(["CEP"], new(Tipo.Paciente, p => p.Cep, GuardarNoPaciente: (p, v) => p.Cep = v));
+        Registrar(["CNS", "CNS_PACIENTE", "CARTAO_SUS", "CARTAO_DO_SUS", "CARTAO_NACIONAL_DE_SAUDE"], new(Tipo.Paciente, p => p.Cns, GuardarNoPaciente: (p, v) => p.Cns = v));
         Registrar(["LOCAL", "LOCAL_ATENDIMENTO", "LOCAL_DE_ATENDIMENTO", "NOME_LOCAL", "CLINICA", "NOME_CLINICA"], new(Tipo.Local, DoLocal: l => l.Nome));
         Registrar(["LOCAL_ENDERECO", "ENDERECO_LOCAL", "ENDERECO_CLINICA"], new(Tipo.Local, DoLocal: l => l.Endereco));
         Registrar(["CIDADE", "LOCAL_CIDADE", "CIDADE_LOCAL"], new(Tipo.Local, DoLocal: l => l.Cidade));

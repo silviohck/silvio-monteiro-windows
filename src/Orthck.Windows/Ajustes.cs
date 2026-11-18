@@ -22,6 +22,16 @@ public sealed class Ajustes
     /// <summary>Filtro de local do painel "Atendidos recentemente" (nome do local; "" = todos).</summary>
     public string FiltroLocalRecentes { get; set; } = "";
     public Dictionary<string, int> GrupoDasTabelas { get; set; } = [];
+    /// <summary>"Limpar" em Atendidos recentemente: só aparecem atendimentos depois deste momento (o Histórico continua).</summary>
+    public DateTimeOffset? RecentesLimposEm { get; set; }
+    /// <summary>Pacientes tirados da lista um a um, até o momento em que foram tirados.</summary>
+    public Dictionary<Guid, DateTimeOffset> RecentesOcultos { get; set; } = [];
+    /// <summary>Prontuário: ficha escolhida, lado do Modelo de atendimento e "Tirar os ___ não preenchidos".</summary>
+    public string FichaSelecionada { get; set; } = "";
+    public string LadoModelo { get; set; } = "DIREITO";
+    public bool TirarLacunas { get; set; } = true;
+    /// <summary>Quando a pasta foi enviada ao Google Drive pela última vez.</summary>
+    public DateTimeOffset? UltimoEnvioPastaDrive { get; set; }
 
     private static string Arquivo => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Orthck", "ajustes.json");
     public static Ajustes Atual { get; private set; } = new();

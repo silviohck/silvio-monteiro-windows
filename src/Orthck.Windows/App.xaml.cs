@@ -57,7 +57,10 @@ public partial class App : Application
         {
             try
             {
-                return new Armazenamento(pasta) { Conversor = new Word(), ResolverAtalho = Atalhos.Resolver };
+                return new Armazenamento(pasta)
+                {
+                    Conversor = new Word(), ResolverAtalho = Atalhos.Resolver, CredencialGoogleEmbutida = ConectarGoogleJanela.CredencialEmbutida
+                };
             }
             catch (DadosIlegiveisException ex)
             {

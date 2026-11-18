@@ -15,3 +15,5 @@ dados.json
 *.db
 *.db-shm
 *.db-wal
+# Exceção: as fichas em branco do Prontuário que vêm com o app (as mesmas do Mac, sem dados de pacientes).
+!src/Orthck.Core/Fichas/*.docx

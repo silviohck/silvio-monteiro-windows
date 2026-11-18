@@ -44,6 +44,19 @@ public sealed class Word : IImpressoraWord, IConversorDocumentos
                 docObj = word.Documents.Open(arquivo, ConfirmConversions: false, ReadOnly: true, AddToRecentFiles: false, Visible: true);
                 dynamic doc = docObj;
                 try { doc.Activate(); } catch { }
+                // Como no Mac: só imprime se o Word abriu exatamente este arquivo (não um de mesmo nome, de outra pasta)
+                // e se ele está à frente; senão poderia sair o documento errado.
+                var esperado = Path.GetFullPath(arquivo);
+                if (!MesmoArquivo(CaminhoDe(doc), esperado))
+                    throw new InvalidOperationException("O Word já tinha aberto outro documento com o mesmo nome, de outra pasta. Nada foi impresso, para não sair o documento errado. Feche os documentos abertos no Word e imprima de novo.");
+                var ativo = false;
+                for (var tentativa = 0; tentativa < 20 && !ativo; tentativa++)
+                {
+                    try { ativo = MesmoArquivo(CaminhoDe(word.ActiveDocument), esperado); } catch { }
+                    if (!ativo) { try { doc.Activate(); } catch { } Thread.Sleep(250); }
+                }
+                if (!ativo)
+                    throw new InvalidOperationException("O Word não deixou o documento à frente para imprimir (outro documento estava ativo). Nada foi impresso, para não sair o documento errado. Feche os documentos abertos no Word e reenvie.");
                 if (!string.IsNullOrWhiteSpace(impressora))
                 {
                     try
@@ -73,7 +86,9 @@ public sealed class Word : IImpressoraWord, IConversorDocumentos
                 // Antes do comando de imprimir, nada foi enviado (erro). Durante ele, não dá para garantir (incerto).
                 resultado = enviando
                     ? new ResultadoImpressao(DesfechoImpressao.Incerto, $"O Word deu erro durante o envio. Confira a impressora antes de reenviar. {e.Message}")
-                    : new ResultadoImpressao(DesfechoImpressao.Falhou, $"O Word não conseguiu preparar a impressão; nada foi enviado. {e.Message}");
+                    : e is InvalidOperationException
+                        ? new ResultadoImpressao(DesfechoImpressao.Falhou, e.Message)
+                        : new ResultadoImpressao(DesfechoImpressao.Falhou, $"O Word não conseguiu preparar a impressão; nada foi enviado. {e.Message}");
             }
             finally
             {
@@ -123,6 +138,13 @@ public sealed class Word : IImpressoraWord, IConversorDocumentos
         finally { if (!thread.IsAlive) UmaSessao.Release(); else _ = Task.Run(() => { thread.Join(); UmaSessao.Release(); }); }
         if (erro != null) throw new InvalidDataException($"O Word não conseguiu converter “{Path.GetFileName(origem)}”. {erro.Message}", erro);
     }
+
+    private static string CaminhoDe(dynamic documento)
+    {
+        try { return Path.GetFullPath((string)documento.FullName); } catch { return ""; }
+    }
+
+    private static bool MesmoArquivo(string a, string b) => a.Length > 0 && string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
     private static void Encerrar(object? wordObj, object? docObj, bool wordDoUsuario, string? impressoraAnterior)
     {

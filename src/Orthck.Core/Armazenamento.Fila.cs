@@ -61,6 +61,15 @@ public sealed partial class Armazenamento
         Salvar();
     }
 
+    /// <summary>"Limpar fila": tira todos os itens (aguardando, com erro e enviados). Os documentos e o Histórico
+    /// continuam; nada é impresso nem cancelado na impressora.</summary>
+    public void LimparFila()
+    {
+        if (ProcessandoFila) return;
+        Dados.FilaImpressao.Clear();
+        Salvar();
+    }
+
     public void LimparEnviadosDaFila()
     {
         if (ProcessandoFila) return;
