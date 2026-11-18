@@ -7,7 +7,7 @@ priorizando **previsibilidade, estabilidade e paridade funcional**.
 
 ## O que é
 
-Versão Windows do Orthck, espelhando o app do Mac tela por tela: Gerar documento, Fila de impressão, Pacientes, Locais de atendimento, Modelos (com pasta sincronizada), Histórico e as tabelas CID-10, SIGTAP e TUSS. Veja a [matriz de paridade](docs/PARIDADE.md).
+Versão Windows do Orthck, espelhando o app do Mac tela por tela: Gerar documento, Fila de impressão, Pacientes, Locais de atendimento, Modelos (com pasta sincronizada), Histórico e as tabelas CID-10 e SIGTAP. Veja a [matriz de paridade](docs/PARIDADE.md).
 
 ## Tecnologias
 
@@ -53,7 +53,7 @@ O workflow **Windows — compilar e testar Orthck** também publica uma compila�
 
 Os dados ficam **somente neste computador**, em `%LOCALAPPDATA%\Orthck` (`dados.json`, a pasta `Modelos` e os backups diários em `Backups`). Nunca envie esse conteúdo, documentos de pacientes ou logs com informações reais para um repositório público. Antes de atender pacientes, use uma conta do Windows com senha, disco criptografado (BitLocker) e um backup fora do computador.
 
-## Tabelas CID-10 / SIGTAP / TUSS
+## Tabelas CID-10 / SIGTAP
 
 Vêm embutidas no app (as mesmas do Mac) e funcionam sem internet. Para atualizar depois que o projeto Mac atualizar as dele:
 

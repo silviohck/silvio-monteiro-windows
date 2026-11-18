@@ -6,7 +6,7 @@ using Orthck.Core;
 
 namespace Orthck.Windows;
 
-public enum Secao { Gerar, Fila, Pacientes, Locais, Modelos, Historico, Cid, Sigtap, Tuss }
+public enum Secao { Gerar, Fila, Pacientes, Locais, Modelos, Historico, Cid, Sigtap }
 
 /// <summary>Janela principal: barra lateral com as seções (como o NavigationSplitView do Mac) e a tela escolhida.</summary>
 public sealed class JanelaPrincipal : Window
@@ -32,7 +32,6 @@ public sealed class JanelaPrincipal : Window
         (Secao.Historico, "Histórico", Ui.GRelogio),
         (Secao.Cid, "CID-10", Ui.GEstetoscopio),
         (Secao.Sigtap, "SIGTAP (SUS)", Ui.GCruz),
-        (Secao.Tuss, "TUSS", Ui.GLista),
     ];
 
     public JanelaPrincipal(Armazenamento armazenamento, Word word)
@@ -67,6 +66,14 @@ public sealed class JanelaPrincipal : Window
                 e.Cancel = true;
         };
         PreviewKeyDown += AoTeclar;
+        // Documentos impressos ficam 2 minutos na fila como "Enviado" e depois saem sozinhos (como no Mac).
+        var relogio = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
+        relogio.Tick += (_, _) =>
+        {
+            try { if (Arm.LimparEnviadosAntigos() && SecaoAtual == Secao.Fila) Mostrar(Secao.Fila); }
+            catch (Exception ex) { Registro.Erro("limpar enviados da fila", ex); }
+        };
+        relogio.Start();
         Mostrar(Secao.Gerar);
         AtualizarLateral();
     }
@@ -140,8 +147,7 @@ public sealed class JanelaPrincipal : Window
             Secao.Modelos => new ModelosView(this),
             Secao.Historico => new HistoricoView(this),
             Secao.Cid => new TabelaCodigosView(TabelaDeCodigos.Cid10, "cid"),
-            Secao.Sigtap => new TabelaCodigosView(TabelaDeCodigos.Sigtap, "sigtap"),
-            _ => new TabelaCodigosView(TabelaDeCodigos.Tuss, "tuss"),
+            _ => new TabelaCodigosView(TabelaDeCodigos.Sigtap, "sigtap"),
         };
         if (secao == Secao.Gerar) _gerar!.AoAparecer();
     }
@@ -181,6 +187,10 @@ public sealed class JanelaPrincipal : Window
         var procurar = Ui.Botao("Impressoras do Windows…", Impressoras.AbrirConfiguracoes, glifo: Ui.GBusca, dica: "Abre as configurações de impressoras do Windows para adicionar uma impressora ou escolher a padrão");
         procurar.HorizontalAlignment = HorizontalAlignment.Stretch;
         impressora.Add(procurar);
+        var parar = Ui.Botao("Parar todas as impressões", PararImpressoes, glifo: Ui.GParar,
+            dica: "A fila não envia mais nada e os documentos que já estão na impressora são cancelados");
+        parar.HorizontalAlignment = HorizontalAlignment.Stretch;
+        impressora.Add(parar);
         var dados = Ui.Coluna(6);
         dados.Add(Ui.TituloSecao("Dados", Ui.GBackup));
         var importar = Ui.Botao("Importar dados (.json)…", () => ImportarDados(), glifo: Ui.GImportar,
@@ -216,6 +226,19 @@ public sealed class JanelaPrincipal : Window
         combo.Margin = new Thickness(0, 0, 4, 0);
         linha.Children.Add(combo);
         return linha;
+    }
+
+    /// <summary>Para a fila (o documento que já está no Word termina) e cancela o que está no spooler do Windows.</summary>
+    public void PararImpressoes()
+    {
+        if (!Ui.Confirmar("Parar todas as impressões?", $"A fila não envia o próximo documento e os trabalhos que estão em {NomeDaImpressora} são cancelados. Os documentos continuam salvos e podem ser enviados de novo pela fila.", true))
+            return;
+        Arm.PararFila();
+        var (cancelados, falharam) = Impressoras.CancelarTudo(ImpressoraEscolhida);
+        var texto = cancelados == 0 ? "Nenhum trabalho estava aguardando na impressora." : $"{Texto.Plural(cancelados, "trabalho cancelado", "trabalhos cancelados")} na impressora.";
+        if (falharam > 0) texto += $"\n\n{falharam} não puderam ser cancelados pelo app (pode exigir administrador). Abra a impressora nas configurações do Windows e cancele por lá.";
+        if (Arm.ProcessandoFila) texto += "\n\nA fila para depois do documento que está sendo enviado agora.";
+        Ui.Informar(texto);
     }
 
     public static string NomeDaImpressora => Ajustes.Atual.Impressora.Length == 0 ? "impressora padrão do Windows" : Ajustes.Atual.Impressora;

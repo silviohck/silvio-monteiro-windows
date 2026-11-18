@@ -19,6 +19,8 @@ public sealed class Ajustes
     public string FiltroLocalModelos { get; set; } = "";
     public string FiltroTipoModelos { get; set; } = "";
     public string FiltroLocalPacientes { get; set; } = "";
+    /// <summary>Filtro de local do painel "Atendidos recentemente" (nome do local; "" = todos).</summary>
+    public string FiltroLocalRecentes { get; set; } = "";
     public Dictionary<string, int> GrupoDasTabelas { get; set; } = [];
 
     private static string Arquivo => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Orthck", "ajustes.json");

@@ -26,31 +26,58 @@ public sealed class GerarView : UserControl
     private string? _aviso;
     private string? _ultimoDocumento;
     private bool _geracaoConcluida;
-    private string? _pastaAvulsa;
     private bool _imprimindo;
     private bool _ignorarNome;
 
     // Controles que não podem ser recriados enquanto se digita.
     private readonly TextBox _nome = Ui.CaixaDeTexto(dica: "Nome do paciente");
     private readonly TextBox _nascimentoDoNovo = Ui.CaixaDeTexto(dica: "Data de nascimento (dd/mm/aaaa) — ajuda a diferenciar");
-    private readonly ContentControl _quadroDoLocal = new(), _documentoPronto = new(), _secaoDocumento = new(), _situacaoPaciente = new(),
-        _secaoCampos = new(), _secaoSalvar = new();
+    private readonly ContentControl _quadroDoLocal = new(), _documentoPronto = new(), _favoritos = new(), _secaoDocumento = new(), _situacaoPaciente = new(),
+        _secaoCampos = new(), _secaoSalvar = new(), _painel = new();
     private readonly StackPanel _pagina = Ui.Coluna(0);
     private readonly ContentControl _raiz = new();
+    private readonly Grid _grade = new();
+    private ScrollViewer? _rolagem;
+    private DateTime? _filtroDia;
+    private readonly HashSet<Guid> _abertosNoPainel = [];
+
+    private static readonly System.Globalization.CultureInfo PtBr = new("pt-BR");
+    /// <summary>Nome e campos em maiúsculas, como no Mac ("CAPS LOCK ativo").</summary>
+    public static string Maiusculas(string texto) => texto.ToUpper(PtBr);
 
     public GerarView(JanelaPrincipal janela)
     {
         _janela = janela;
         Content = _raiz;
-        _nome.TextChanged += (_, _) => { if (!_ignorarNome) NomeMudou(); };
+        _nome.TextChanged += (_, _) =>
+        {
+            // Sempre em maiúsculas (digitado, colado ou vindo do cadastro).
+            var maior = Maiusculas(_nome.Text);
+            if (maior != _nome.Text) { var cursor = _nome.CaretIndex; _nome.Text = maior; _nome.CaretIndex = Math.Min(cursor, maior.Length); return; }
+            if (!_ignorarNome) NomeMudou();
+        };
         _nome.MinWidth = 260;
 
         _pagina.Children.Add(_quadroDoLocal);
         _pagina.Children.Add(_documentoPronto);
+        _pagina.Children.Add(_favoritos);
         _pagina.Children.Add(_secaoDocumento);
         _pagina.Children.Add(MontarSecaoPaciente());
         _pagina.Children.Add(_secaoCampos);
         _pagina.Children.Add(_secaoSalvar);
+
+        // Formulário à esquerda; à direita, o atalho da fila e os pacientes atendidos recentemente (como no Mac).
+        _grade.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        _grade.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        _grade.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(300) });
+        var divisa = new Border { Width = 1 };
+        divisa.SetResourceReference(Border.BackgroundProperty, Tema.Borda);
+        Grid.SetColumn(divisa, 1);
+        _grade.Children.Add(divisa);
+        var rolagemDoPainel = new ScrollViewer { Content = _painel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(16, 20, 16, 20) };
+        Grid.SetColumn(rolagemDoPainel, 2);
+        _grade.Children.Add(rolagemDoPainel);
+        Arm.Mudou += () => Dispatcher.InvokeAsync(() => { if (IsVisible) AtualizarPainel(); });
     }
 
     private LocalAtendimento? Local => Arm.Dados.Locais.FirstOrDefault(l => l.Id.ToString() == Ajustes.Atual.LocalSelecionado);
@@ -87,7 +114,14 @@ public sealed class GerarView : UserControl
                 "Ir para Modelos", () => _janela.Mostrar(Secao.Modelos));
             return;
         }
-        if (_raiz.Content is not ScrollViewer) _raiz.Content = Ui.Pagina(_pagina, 940);
+        if (_raiz.Content != _grade)
+        {
+            if (_rolagem != null) _grade.Children.Remove(_rolagem);
+            _rolagem = Ui.Pagina(_pagina, 940);
+            Grid.SetColumn(_rolagem, 0);
+            _grade.Children.Add(_rolagem);
+            _raiz.Content = _grade;
+        }
         if (Local == null && Ajustes.Atual.LocalSelecionado.Length > 0) { Ajustes.Atual.LocalSelecionado = ""; Ajustes.Salvar(); }
         ValidarModelo();
         if (_valores.Count == 0) Preencher();
@@ -100,10 +134,12 @@ public sealed class GerarView : UserControl
     {
         _quadroDoLocal.Content = QuadroDoLocal();
         _documentoPronto.Content = DocumentoPronto();
+        _favoritos.Content = Favoritos();
         _secaoDocumento.Content = SecaoDocumento();
         AtualizarSituacaoPaciente();
         _secaoCampos.Content = Modelo is { } m ? SecaoCampos(m) : null;
         AtualizarSecaoSalvar();
+        AtualizarPainel();
     }
 
     // MARK: Reações (onChange do Mac)
@@ -204,11 +240,10 @@ public sealed class GerarView : UserControl
         _pacienteEscolhido = null;
         _outroPaciente = false;
         _nascimentoDoNovo.Text = "";
-        _pastaAvulsa = null;
         _ignorarNome = true; _nome.Text = ""; _ignorarNome = false;
         RecomecarAtendimento();
         _copias = Modelo?.Copias ?? 1;
-        if (_raiz.Content is ScrollViewer s) s.ScrollToTop();
+        _rolagem?.ScrollToTop();
         AoAparecer();
         _nome.Focus();
     }
@@ -323,8 +358,94 @@ public sealed class GerarView : UserControl
         var modelo = Ui.Escolha(opcoes, _modeloId, id => { if (id != _modeloId) TrocarModelo(id); });
         modelo.HorizontalAlignment = HorizontalAlignment.Stretch;
         modelo.IsEnabled = _subpasta.Length > 0;
-        corpo.Add(Ui.Rotulado("Modelo", modelo, 150));
+        var linhaDoModelo = new DockPanel();
+        if (Modelo is { } escolhido)
+        {
+            var favorito = Arm.EhFavorito(escolhido, Local?.Id);
+            var estrela = Ui.BotaoIcone(favorito ? Ui.GEstrelaCheia : Ui.GEstrela,
+                favorito ? "Tirar dos favoritos deste local" : "Adicionar aos favoritos deste local",
+                () => { Arm.AlternarFavorito(escolhido, Local?.Id); Atualizar(); }, favorito ? Tema.Aviso : Tema.TextoSecundario);
+            estrela.Margin = new Thickness(6, 0, 0, 0);
+            DockPanel.SetDock(estrela, Dock.Right);
+            linhaDoModelo.Children.Add(estrela);
+        }
+        linhaDoModelo.Children.Add(modelo);
+        corpo.Add(Ui.Rotulado("Modelo", linhaDoModelo, 150));
         return Ui.Secao("Documento", Ui.GDocumento, corpo);
+    }
+
+    // MARK: Favoritos (de cada local, na ordem escolhida)
+
+    private FrameworkElement? Favoritos()
+    {
+        var favoritos = Arm.FavoritosPara(Local);
+        if (favoritos.Count == 0) return null;
+        var grade = new WrapPanel();
+        for (var i = 0; i < favoritos.Count; i++)
+        {
+            var favorito = favoritos[i];
+            var escolhido = favorito.Id == _modeloId;
+            var textos = Ui.Coluna(0);
+            var nome = Ui.Texto(favorito.Nome, Estilo.Normal, escolhido ? Tema.TextoNoDestaque : null);
+            nome.FontWeight = FontWeights.SemiBold;
+            nome.TextWrapping = TextWrapping.NoWrap; nome.TextTrimming = TextTrimming.CharacterEllipsis;
+            textos.Add(nome);
+            var tipo = Ui.Texto(favorito.Categoria.Replace(Armazenamento.SeparadorDeSubpastas, " › "), Estilo.Legenda, escolhido ? Tema.TextoNoDestaque : Tema.TextoSecundario);
+            tipo.TextWrapping = TextWrapping.NoWrap; tipo.TextTrimming = TextTrimming.CharacterEllipsis;
+            textos.Add(tipo);
+            var botao = new Button
+            {
+                Content = textos, Width = 190, Margin = new Thickness(0, 0, 8, 8), Padding = new Thickness(10, 6, 10, 6),
+                HorizontalContentAlignment = HorizontalAlignment.Left, ToolTip = $"{favorito.Nome}\nClique com o botão direito para mudar a ordem."
+            };
+            if (escolhido) botao.SetResourceReference(BackgroundProperty, Tema.Destaque);
+            botao.Click += (_, _) => Ui.Executar(() => IrParaFavorito(favorito));
+            var menu = new ContextMenu();
+            void Opcao(string titulo, bool ativo, Action acao)
+            {
+                var item = new MenuItem { Header = titulo, IsEnabled = ativo };
+                item.Click += (_, _) => Ui.Executar(() => { acao(); Atualizar(); });
+                menu.Items.Add(item);
+            }
+            var posicao = i;
+            Opcao("Mover para a esquerda", posicao > 0, () => Arm.MoverFavorito(favorito, favoritos[posicao - 1], Local));
+            Opcao("Mover para a direita", posicao < favoritos.Count - 1, () => Arm.MoverFavorito(favorito, posicao + 2 < favoritos.Count ? favoritos[posicao + 2] : null, Local));
+            Opcao("Mover para o início", posicao > 0, () => Arm.MoverFavorito(favorito, favoritos[0], Local));
+            Opcao("Mover para o fim", posicao < favoritos.Count - 1, () => Arm.MoverFavorito(favorito, null, Local));
+            menu.Items.Add(new Separator());
+            Opcao("Tirar dos favoritos", true, () => Arm.AlternarFavorito(favorito, Local?.Id));
+            botao.ContextMenu = menu;
+            // Arrastar um favorito para cima de outro também muda a ordem.
+            botao.AllowDrop = true;
+            Point? inicio = null;
+            botao.PreviewMouseLeftButtonDown += (_, e) => inicio = e.GetPosition(botao);
+            botao.PreviewMouseMove += (_, e) =>
+            {
+                if (inicio is not { } p || e.LeftButton != MouseButtonState.Pressed) return;
+                var agora = e.GetPosition(botao);
+                if (Math.Abs(agora.X - p.X) < SystemParameters.MinimumHorizontalDragDistance && Math.Abs(agora.Y - p.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+                inicio = null;
+                DragDrop.DoDragDrop(botao, new DataObject("OrthckFavorito", favorito.Id.ToString()), DragDropEffects.Move);
+            };
+            botao.Drop += (_, e) =>
+            {
+                if (e.Data.GetData("OrthckFavorito") is not string id || Arm.Modelo(Guid.Parse(id)) is not { } arrastado || arrastado.Id == favorito.Id) return;
+                Ui.Executar(() => { Arm.MoverFavorito(arrastado, favorito, Local); Atualizar(); });
+            };
+            grade.Children.Add(botao);
+        }
+        var secao = Ui.Secao("Favoritos", Ui.GEstrelaCheia, grade, "Arraste ou clique com o botão direito para mudar a ordem. A estrela ao lado do modelo adiciona ou tira.");
+        return secao;
+    }
+
+    /// <summary>Abre o modelo favorito; o nome digitado continua.</summary>
+    private void IrParaFavorito(ModeloDocumento modelo)
+    {
+        _subpasta = modelo.Categoria;
+        _modeloId = modelo.Id;
+        _copias = modelo.Copias;
+        RecomecarAtendimento();
+        Atualizar();
     }
 
     /// <summary>Pasta com subpastas vira submenu; uma pasta que também tem modelos próprios ganha "Documentos em …".</summary>
@@ -393,13 +514,15 @@ public sealed class GerarView : UserControl
         return Ui.Secao("Paciente", Ui.GPessoa, corpo);
     }
 
-    /// <summary>Pacientes de todos os locais com o trecho digitado; os já atendidos no local escolhido vêm primeiro.</summary>
+    /// <summary>Pacientes com o trecho digitado, só do local escolhido (cadastrados nele ou já atendidos nele); sem local, todos.</summary>
     private List<Paciente> Sugestoes()
     {
         if (NomeDigitado.Length < 2 || Homonimos.Count > 0) return [];
-        var encontrados = Arm.PacientesOrdenados.Where(p => Texto.Contem(p.Nome, NomeDigitado)).ToList();
-        var daqui = encontrados.Where(p => Arm.LocaisDoPaciente(p).Any(l => l.Id == Local?.Id)).ToList();
-        return daqui.Concat(encontrados.Except(daqui)).Take(8).ToList();
+        var local = Local;
+        return Arm.PacientesOrdenados
+            .Where(p => Texto.Contem(p.Nome, NomeDigitado)
+                && (local == null || Arm.LocaisDoPaciente(p).Any(l => l.Id == local.Id)))
+            .Take(8).ToList();
     }
 
     private void AtualizarSituacaoPaciente()
@@ -494,6 +617,7 @@ public sealed class GerarView : UserControl
             var longo = new[] { "DIAGNOSTICO", "CONDUTA", "OBSERVAC", "HISTORIA", "ANAMNESE", "EXAME", "RELATORIO", "JUSTIFICATIVA", "TRATAMENTO", "EVOLUCAO", "PRESCRICAO", "LAUDO" }
                 .Any(chave.Contains);
             var caixa = Ui.CaixaDeTexto(_valores.GetValueOrDefault(campo, ""), multilinha: longo);
+            caixa.CharacterCasing = CharacterCasing.Upper;
             System.Windows.Automation.AutomationProperties.SetName(caixa, campo);
             if (!longo) caixa.TextWrapping = TextWrapping.Wrap;
             var bloco = Ui.Coluna(4);
@@ -558,73 +682,17 @@ public sealed class GerarView : UserControl
 
     // MARK: Salvar e imprimir
 
-    private string PastaDeDestino => _pastaAvulsa ?? Arm.PastaDosDocumentos(Modelo?.Categoria ?? _subpasta, Local);
-
-    /// <summary>"Pastas já existentes" ou quais serão criadas.</summary>
-    private string SituacaoDasPastas()
-    {
-        var pastaDoLocal = Arm.PastaDoLocal(Local);
-        var novas = new List<string>();
-        if (!Directory.Exists(pastaDoLocal)) novas.Add($"“{Path.GetFileName(pastaDoLocal)}”");
-        if (PastaDeDestino != pastaDoLocal && !Directory.Exists(PastaDeDestino)) novas.Add($"“{Path.GetFileName(PastaDeDestino)}”");
-        return novas.Count == 0 ? "Pasta do local e do tipo já existem; o arquivo vai direto para lá." : "Será criada ao gerar: " + string.Join(" e ", novas) + ".";
-    }
-
     private void AtualizarSecaoSalvar()
     {
         if (Modelo is not { } modelo) { _secaoSalvar.Content = null; return; }
         var corpo = Ui.Coluna(12);
 
-        var destino = Ui.Coluna(4);
-        var titulo = Ui.Linha(6, Ui.Texto("Será salvo em"));
-        if (_pastaAvulsa != null) titulo.Add(Ui.Texto("(só este documento)", Estilo.Legenda));
-        destino.Add(titulo);
-        var caminho = Ui.Texto(Ui.CaminhoAbreviado(PastaDeDestino), Estilo.Normal, Tema.TextoSecundario);
-        caminho.ToolTip = PastaDeDestino;
-        destino.Add(caminho);
-        if (_pastaAvulsa == null) destino.Add(Ui.Texto(SituacaoDasPastas(), Estilo.Legenda));
-
-        var maisOpcoes = new Button { Content = Ui.ConteudoDoBotao("Mais opções", Ui.GSetaBaixo), Padding = new Thickness(14, 7, 14, 7), MinHeight = 34 };
-        var menu = new ContextMenu { PlacementTarget = maisOpcoes, Placement = PlacementMode.Bottom };
-        if (Local is { } local)
-        {
-            var nomeDoLocal = local.Nome.Length == 0 ? "este local" : local.Nome;
-            menu.Items.Add(ItemDeMenu($"Usar outra pasta só para {nomeDoLocal}…", () =>
-            {
-                if (Ui.EscolherPasta($"Escolha a pasta de {nomeDoLocal}. Se ela não tiver o nome do local, o app cria a pasta do local dentro dela.") is { } pasta)
-                {
-                    local.Pasta = pasta; Arm.Salvar(); _pastaAvulsa = null; AtualizarSecaoSalvar();
-                }
-            }));
-            if (local.Pasta.Length > 0)
-                menu.Items.Add(ItemDeMenu("Voltar a usar a pasta principal", () => { local.Pasta = ""; Arm.Salvar(); AtualizarSecaoSalvar(); }));
-        }
-        menu.Items.Add(ItemDeMenu("Só este documento…", () => { _pastaAvulsa = Ui.EscolherPasta("Escolha onde salvar só este documento."); AtualizarSecaoSalvar(); }));
-        if (_pastaAvulsa != null) menu.Items.Add(ItemDeMenu("Voltar para a pasta do local", () => { _pastaAvulsa = null; AtualizarSecaoSalvar(); }));
-        maisOpcoes.Click += (_, _) => menu.IsOpen = true;
-
-        var botoesPasta = new WrapPanel { Tag = 8.0 };
-        botoesPasta.Add(Ui.Botao("Escolher pasta principal…", () =>
-        {
-            if (Ui.EscolherPasta("Escolha a pasta principal. Dentro dela, o app usa (ou cria) uma pasta para cada local e, dentro desta, uma pasta para cada tipo de documento.") is not { } pasta) return;
-            Arm.Dados.PastaDocumentos = pasta;
-            // A pasta principal passa a valer também para este local.
-            if (Local is { Pasta.Length: > 0 } l) l.Pasta = "";
-            Arm.Salvar();
-            _pastaAvulsa = null;
-            AtualizarSecaoSalvar();
-        }, glifo: Ui.GPasta));
-        botoesPasta.Add(maisOpcoes);
-        botoesPasta.Add(Ui.Botao("Abrir no Explorador", () => Ui.AbrirPasta(PastaDeDestino), glifo: Ui.GPastaAberta));
-        destino.Add(botoesPasta, 8);
-        corpo.Add(destino);
-        corpo.Add(Ui.Divisor());
 
         var abrir = new CheckBox { Content = "Abrir o documento depois de gerar", IsChecked = Ajustes.Atual.AbrirAoGerar };
         abrir.Click += (_, _) => { Ajustes.Atual.AbrirAoGerar = abrir.IsChecked == true; Ajustes.Salvar(); };
         corpo.Add(abrir);
 
-        var acao = Ui.Escolha([("Adicionar à fila de impressão", "fila"), ("Imprimir agora", "imprimir"), ("Só salvar", "salvar")], Ajustes.Atual.AcaoDepoisDeGerar,
+        var acao = Ui.Escolha([("Adicionar à fila de impressão", "fila"), ("Imprimir agora", "imprimir"), ("Só abrir", "salvar")], Ajustes.Atual.AcaoDepoisDeGerar,
             v => { Ajustes.Atual.AcaoDepoisDeGerar = v; Ajustes.Salvar(); AtualizarSecaoSalvar(); }, 260);
         var copias = SeletorDeCopias(_copias, v => _copias = v, "Quantas cópias guardar na fila ou enviar à impressora");
         corpo.Add(Ui.Extremos(Ui.Rotulado("Depois de gerar", acao, 150), copias));
@@ -646,7 +714,8 @@ public sealed class GerarView : UserControl
                 else if (_imprimindo) aviso.Children.Add(Ui.Texto("Enviando…", Estilo.Normal, Tema.TextoSecundario));
             }
         }
-        var gerar = Ui.Botao("Gerar documento", () => Ui.ExecutarAsync(() => Gerar(modelo)), principal: true, glifo: Ui.GSalvar);
+        // O botão lê o modelo escolhido na hora do clique (nunca um modelo guardado de antes).
+        var gerar = Ui.Botao("Gerar documento", () => Ui.ExecutarAsync(Gerar), principal: true, glifo: Ui.GSalvar);
         gerar.IsDefault = true;
         gerar.Padding = new Thickness(18, 9, 18, 9);
         gerar.IsEnabled = !_geracaoConcluida && !PrecisaEscolherPaciente && !(NomeDigitado.Length == 0 && modelo.Campos.Any(CamposAutomaticos.EhNomeDoPaciente));
@@ -660,13 +729,6 @@ public sealed class GerarView : UserControl
         corpo.Add(Ui.Divisor());
         corpo.Add(Ui.Extremos(aviso, direita));
         _secaoSalvar.Content = Ui.Secao("Salvar e imprimir", Ui.GSalvar, corpo);
-    }
-
-    private static MenuItem ItemDeMenu(string titulo, Action acao)
-    {
-        var item = new MenuItem { Header = titulo };
-        item.Click += (_, _) => Ui.Executar(acao);
-        return item;
     }
 
     /// <summary>"− 2 cópias +" (Stepper do Mac), de 1 a 20.</summary>
@@ -703,13 +765,22 @@ public sealed class GerarView : UserControl
 
     // MARK: Gerar e imprimir
 
-    private async Task Gerar(ModeloDocumento modelo)
+    private async Task Gerar()
     {
         if (_geracaoConcluida || PrecisaEscolherPaciente) return;
-        // O documento vai para a subpasta do próprio modelo.
-        if (!Arm.ModelosPara(Local).Any(m => m.Id == modelo.Id))
+        // Sempre o modelo que está na tela agora, e só se for da subpasta e do local escolhidos.
+        if (Modelo is not { } modelo || modelo.Categoria != _subpasta || !Arm.ModelosPara(Local).Any(m => m.Id == modelo.Id))
         {
-            Ui.Erro("Este modelo não é do local escolhido. Escolha a subpasta e o modelo de novo.");
+            Ui.Erro("Escolha a subpasta e o modelo de novo: o modelo da tela não é deste local.");
+            return;
+        }
+        // Se o arquivo foi editado na pasta de modelos, usa a versão nova; se os campos mudaram, refaz o formulário antes.
+        if (Arm.AtualizarModeloDaPasta(modelo))
+        {
+            foreach (var campo in modelo.Campos.Where(c => !CamposAutomaticos.EhNomeDoPaciente(c) && !_valores.ContainsKey(c)))
+                _valores[campo] = CamposAutomaticos.Valor(campo, PacienteCadastrado, Local) ?? "";
+            Atualizar();
+            Ui.Informar("O modelo foi alterado na pasta de modelos e os campos mudaram. Confira o formulário e clique em Gerar documento de novo.");
             return;
         }
         var nome = NomeDigitado;
@@ -719,7 +790,7 @@ public sealed class GerarView : UserControl
         string destino;
         try
         {
-            destino = Arm.CaminhoParaNovoDocumento(modelo, modelo.Categoria, Local, nome, _pastaAvulsa);
+            destino = Arm.CaminhoParaNovoDocumento(modelo, modelo.Categoria, Local, nome);
             DocxTemplate.Fill(Arm.UrlDoModelo(modelo), destino, valoresFinais);
         }
         catch (Exception ex)
@@ -754,7 +825,6 @@ public sealed class GerarView : UserControl
         if (nome.Length > 0) { try { Clipboard.SetText(nome); copiado = " · nome copiado"; } catch { } }
         _aviso = $"Salvo: {Path.GetFileName(destino)}{copiado}";
         _ultimoDocumento = destino;
-        _pastaAvulsa = null;
         var acao = Ajustes.Atual.AcaoDepoisDeGerar;
         ItemFilaImpressao? item = null;
         if (acao is "fila" or "imprimir")
@@ -767,7 +837,9 @@ public sealed class GerarView : UserControl
             if (acao == "imprimir" && jaImprimindo) item = null;
         }
         Atualizar();
-        if (Ajustes.Atual.AbrirAoGerar) Ui.Abrir(destino);
+        // "Só abrir" abre sempre: o documento não fica guardado, é para usar agora.
+        if (Ajustes.Atual.AbrirAoGerar || acao == "salvar") Ui.Abrir(destino);
+        Arm.LimparDocumentosTemporarios();
         if (item != null && acao == "imprimir")
         {
             _imprimindo = true; AtualizarSecaoSalvar();
@@ -776,6 +848,97 @@ public sealed class GerarView : UserControl
             if (item.Situacao != SituacaoImpressao.Enviado) Ui.Erro($"{item.Observacao}\n\nVeja a aba Fila de impressão.");
             AtualizarSecaoSalvar();
         }
+    }
+
+    // MARK: Painel lateral (fila e atendidos recentemente)
+
+    private void AtualizarPainel()
+    {
+        var p = Ui.Coluna(12);
+        var pendentes = Arm.Dados.FilaImpressao.Where(x => x.Situacao == SituacaoImpressao.Pendente).Select(x => x.Id).ToList();
+        if (Arm.ProcessandoFila)
+        {
+            p.Add(Ui.Linha(8, new ProgressBar { IsIndeterminate = true, Width = 60, Height = 4, VerticalAlignment = VerticalAlignment.Center }, Ui.Texto("Imprimindo…", Estilo.Normal, Tema.TextoSecundario)));
+            var parar = Ui.Botao("Parar impressões", _janela.PararImpressoes, glifo: Ui.GParar);
+            parar.HorizontalAlignment = HorizontalAlignment.Stretch;
+            p.Add(parar);
+        }
+        else if (pendentes.Count > 0)
+        {
+            var fila = Ui.Botao($"Imprimir fila ({pendentes.Count})", () => Ui.ExecutarAsync(async () =>
+            {
+                await Arm.ImprimirFilaAsync(pendentes, JanelaPrincipal.ImpressoraEscolhida, _janela.Word);
+                var problemas = Arm.Dados.FilaImpressao.Where(x => pendentes.Contains(x.Id) && x.Situacao is SituacaoImpressao.Erro or SituacaoImpressao.Incerto).ToList();
+                if (problemas.Count > 0) Ui.Erro($"{Texto.Plural(problemas.Count, "documento não foi impresso", "documentos não foram impressos")}. Veja a aba Fila de impressão.");
+            }), principal: true, glifo: Ui.GImpressora, dica: $"Imprime em {JanelaPrincipal.NomeDaImpressora}, um por vez");
+            fila.HorizontalAlignment = HorizontalAlignment.Stretch;
+            p.Add(fila);
+        }
+
+        p.Add(Ui.TituloSecao("Atendidos recentemente", Ui.GRelogio));
+        var locais = new List<(string, string)> { ("Todos os locais", "") };
+        locais.AddRange(Arm.LocaisOrdenados.Where(l => l.Nome.Length > 0).Select(l => (l.Nome, l.Nome)));
+        var filtroLocal = Ajustes.Atual.FiltroLocalRecentes;
+        if (filtroLocal.Length > 0 && !locais.Any(l => l.Item2 == filtroLocal)) filtroLocal = "";
+        p.Add(Ui.Escolha(locais, filtroLocal, v => { Ajustes.Atual.FiltroLocalRecentes = v; Ajustes.Salvar(); AtualizarPainel(); }, 160));
+        var dias = new List<(string, DateTime?)> { ("Todos os dias", null) };
+        dias.AddRange(Arm.DiasComAtendimento.Take(60).Select(d => (d == DateTime.Today ? "Hoje" : d == DateTime.Today.AddDays(-1) ? "Ontem" : d.ToString("dd/MM/yyyy (ddd)", PtBr), (DateTime?)d)));
+        if (_filtroDia != null && !dias.Any(d => d.Item2 == _filtroDia)) _filtroDia = null;
+        p.Add(Ui.Escolha(dias, _filtroDia, v => { _filtroDia = v; AtualizarPainel(); }, 160));
+
+        var recentes = Arm.PacientesRecentes(filtroLocal.Length == 0 ? null : filtroLocal, _filtroDia, 12)
+            .OrderBy(r => r.Paciente.Nome, Texto.Ordem).ToList();
+        if (recentes.Count == 0) p.Add(Ui.Texto("Nenhum paciente atendido com esses filtros.", Estilo.Apoio));
+        foreach (var (paciente, ultimo) in recentes) p.Add(LinhaDoRecente(paciente, ultimo));
+        _painel.Content = p;
+    }
+
+    private FrameworkElement LinhaDoRecente(Paciente paciente, DocumentoGerado ultimo)
+    {
+        var bloco = Ui.Coluna(4);
+        var textos = Ui.Coluna(1);
+        var nome = Ui.Texto(paciente.Nome);
+        nome.FontWeight = FontWeights.SemiBold;
+        nome.TextWrapping = TextWrapping.NoWrap; nome.TextTrimming = TextTrimming.CharacterEllipsis;
+        textos.Add(nome);
+        var detalhe = Ui.Texto(string.Join(" · ", new[] { ultimo.Modelo, ultimo.Local ?? "", ultimo.Data.LocalDateTime.ToString("dd/MM HH:mm") }.Where(t => t.Length > 0)), Estilo.Legenda, Tema.TextoSecundario);
+        detalhe.TextWrapping = TextWrapping.NoWrap; detalhe.TextTrimming = TextTrimming.CharacterEllipsis;
+        textos.Add(detalhe);
+        var escolher = new Button
+        {
+            Content = textos, HorizontalContentAlignment = HorizontalAlignment.Stretch, Background = System.Windows.Media.Brushes.Transparent,
+            BorderThickness = new Thickness(0), Padding = new Thickness(4, 3, 4, 3), ToolTip = $"{paciente.Nome}\nUsar este paciente no documento"
+        };
+        escolher.Click += (_, _) => Ui.Executar(() => EscolherPaciente(paciente));
+        var aberto = _abertosNoPainel.Contains(paciente.Id);
+        var mostrar = Ui.BotaoIcone(aberto ? Ui.GSetaBaixo : Ui.GProximo, aberto ? "Esconder os documentos" : "Ver os documentos deste paciente",
+            () => { if (!_abertosNoPainel.Remove(paciente.Id)) _abertosNoPainel.Add(paciente.Id); AtualizarPainel(); });
+        mostrar.VerticalAlignment = VerticalAlignment.Center;
+        var linha = new DockPanel();
+        DockPanel.SetDock(mostrar, Dock.Right);
+        linha.Children.Add(mostrar);
+        linha.Children.Add(escolher);
+        bloco.Add(linha);
+        if (aberto)
+        {
+            var documentos = Ui.Coluna(4);
+            documentos.Margin = new Thickness(12, 0, 0, 4);
+            foreach (var documento in Arm.DocumentosDe(paciente).Take(10))
+            {
+                var existe = File.Exists(documento.Caminho);
+                var texto = $"{documento.Modelo} · {documento.Data.LocalDateTime:dd/MM/yy}";
+                if (!existe) { documentos.Add(Ui.Texto(texto + " (arquivo não existe mais)", Estilo.Legenda, Tema.TextoSecundario)); continue; }
+                var abrir = Ui.Link(texto, () => Ui.Abrir(documento.Caminho), Ui.GDocumento, Estilo.Apoio);
+                var pasta = Ui.BotaoIcone(Ui.GPasta, "Mostrar no Explorador", () => Ui.MostrarNaPasta(documento.Caminho));
+                var linhaDoc = new DockPanel();
+                DockPanel.SetDock(pasta, Dock.Right);
+                linhaDoc.Children.Add(pasta);
+                linhaDoc.Children.Add(abrir);
+                documentos.Add(linhaDoc);
+            }
+            bloco.Add(documentos);
+        }
+        return bloco;
     }
 
     /// <summary>Imprime já, passando pela fila (sem concorrer com "Imprimir todos").</summary>

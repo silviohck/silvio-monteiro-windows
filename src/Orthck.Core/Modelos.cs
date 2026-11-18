@@ -103,6 +103,8 @@ public sealed class ItemFilaImpressao
     public DateTimeOffset CriadoEm { get; set; } = DateTimeOffset.Now;
     public string Situacao { get; set; } = SituacaoImpressao.Pendente;
     public string? Observacao { get; set; }
+    /// <summary>Quando foi enviado para imprimir: o item sai da fila 2 minutos depois (como no Mac).</summary>
+    public DateTimeOffset? EnviadoEm { get; set; }
 
     public static ItemFilaImpressao De(DocumentoGerado documento, int copias) => new()
     {
@@ -133,6 +135,12 @@ public sealed class DadosApp
     public List<string> PastasCompartilhadas { get; set; } = [.. PastasCompartilhadasPadrao];
     /// <summary>Pasta principal dos documentos gerados (vazia = Documentos\Orthck).</summary>
     public string PastaDocumentos { get; set; } = "";
+
+    /// <summary>Versões anteriores: favoritos de todos os locais numa lista só (passam para FavoritosPorLocal ao abrir).</summary>
+    public List<string> Favoritos { get; set; } = [];
+    /// <summary>Favoritos de cada local (id do local em maiúsculas, como no Mac; "" = sem local): nomes dos modelos,
+    /// na ordem escolhida. Um local não vê os favoritos de outro.</summary>
+    public Dictionary<string, List<string>> FavoritosPorLocal { get; set; } = [];
 
     /// <summary>Sem diferenciar maiúsculas e acentos ("1 - Apac" = "1 - APAC").</summary>
     public bool EhCompartilhada(string pasta) => PastasCompartilhadas.Any(x => Texto.Iguais(x, pasta));

@@ -23,7 +23,8 @@ public static class Ui
         GColar = "\uE77F", GPessoa = "\uE77B", GPessoaMais = "\uE8FA", GOk = "\uE73E", GOkCirculo = "\uE930", GAviso = "\uE7BA",
         GFechar = "\uE711", GFecharCirculo = "\uE711", GVoltar = "\uE72B", GProximo = "\uE72A", GAtualizar = "\uE72C", GZip = "\uF012",
         GSalvar = "\uE74E", GCampos = "\uE8FD", GTelefone = "\uE717", GNota = "\uE70B", GMundo = "\uE774", GSetaBaixo = "\uE70D",
-        GTrocar = "\uE8AB", GAbrir = "\uE8E5", GImportar = "\uE896", GPaleta = "\uE790", GBackup = "\uE777";
+        GTrocar = "\uE8AB", GAbrir = "\uE8E5", GImportar = "\uE896", GPaleta = "\uE790", GBackup = "\uE777",
+        GEstrela = "\uE734", GEstrelaCheia = "\uE735", GParar = "\uE71A";
 
     public static TextBlock Texto(string texto, Estilo estilo = Estilo.Normal, string? cor = null)
     {

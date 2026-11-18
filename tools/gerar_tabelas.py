@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Gera as tabelas CID-10, SIGTAP e TUSS embutidas no Orthck Windows a partir do projeto Mac.
+"""Gera as tabelas CID-10 e SIGTAP embutidas no Orthck Windows a partir do projeto Mac.
 
 Uso:
   python tools/gerar_tabelas.py CAMINHO/DO/Silvio-Monteiro
 
-Lê Sources/GeradorDocumentos/{CID10,SIGTAP,TUSS}Dados.swift (as mesmas tabelas oficiais do app Mac)
+Lê Sources/GeradorDocumentos/{CID10,SIGTAP}Dados.swift (as mesmas tabelas oficiais do app Mac)
 e grava src/Orthck.Core/Tabelas/*.txt, no formato "campo|campo". Não modifica o projeto Mac.
 """
 from __future__ import annotations
@@ -34,7 +34,6 @@ def main() -> None:
     fontes = pathlib.Path(sys.argv[1]) / "Sources" / "GeradorDocumentos"
     cid = (fontes / "CID10Dados.swift").read_text(encoding="utf-8")
     sigtap = (fontes / "SIGTAPDados.swift").read_text(encoding="utf-8")
-    tuss = (fontes / "TUSSDados.swift").read_text(encoding="utf-8")
     SAIDA.mkdir(parents=True, exist_ok=True)
     arquivos = {
         "cid10_capitulos.txt": bloco(cid, "capitulos"),
@@ -42,8 +41,7 @@ def main() -> None:
         "sigtap_grupos.txt": bloco(sigtap, "grupos"),
         "sigtap_subgrupos.txt": bloco(sigtap, "subgrupos"),
         "sigtap_procedimentos.txt": bloco(sigtap, "procedimentos"),
-        "tuss_procedimentos.txt": bloco(tuss, "procedimentos"),
-        "versoes.txt": f"sigtap|{valor(sigtap, 'competencia')}\ntuss|{valor(tuss, 'versao')}\n",
+        "versoes.txt": f"sigtap|{valor(sigtap, 'competencia')}\n",
     }
     for nome, conteudo in arquivos.items():
         (SAIDA / nome).write_text(conteudo, encoding="utf-8", newline="\n")
