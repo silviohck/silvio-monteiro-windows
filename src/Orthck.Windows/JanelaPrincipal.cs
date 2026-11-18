@@ -6,7 +6,7 @@ using Orthck.Core;
 
 namespace Orthck.Windows;
 
-public enum Secao { Gerar, Fila, Pacientes, Locais, Modelos, Historico, Cid, Sigtap }
+public enum Secao { Gerar, Prontuario, Fila, Pacientes, Locais, Modelos, Historico, Cid, Sigtap }
 
 /// <summary>Janela principal: barra lateral com as seções (como o NavigationSplitView do Mac) e a tela escolhida.</summary>
 public sealed class JanelaPrincipal : Window
@@ -21,10 +21,17 @@ public sealed class JanelaPrincipal : Window
     public Secao SecaoAtual { get; private set; } = Secao.Gerar;
     /// <summary>A tela de Gerar é mantida entre as trocas de seção, para não perder o que foi digitado.</summary>
     private GerarView? _gerar;
+    private ProntuarioView? _prontuario;
+    /// <summary>Paciente que está sendo atendido agora, compartilhado entre Gerar documento e Prontuário (para não digitar
+    /// o nome de novo ao trocar de aba). Só na memória.</summary>
+    public string NomeEmAtendimento { get; set; } = "";
+    public Guid? PacienteEmAtendimento { get; set; }
+    private bool _fechandoDepoisDoDrive;
 
     public static readonly (Secao Secao, string Titulo, string Glifo)[] Secoes =
     [
         (Secao.Gerar, "Gerar documento", Ui.GDocumentoNovo),
+        (Secao.Prontuario, "Prontuário", Ui.GProntuario),
         (Secao.Fila, "Fila de impressão", Ui.GImpressora),
         (Secao.Pacientes, "Pacientes", Ui.GPessoas),
         (Secao.Locais, "Locais de atendimento", Ui.GPredio),
@@ -58,12 +65,35 @@ public sealed class JanelaPrincipal : Window
         Content = grade;
 
         Arm.Mudou += () => Dispatcher.InvokeAsync(AtualizarLateral);
-        // Ao abrir o app e sempre que ele volta para a frente, acompanha a pasta de modelos (como no Mac).
-        Activated += (_, _) => Ui.ExecutarAsync(() => Sincronizar());
+        Arm.DriveMudou += () => Dispatcher.InvokeAsync(AtualizarLateral);
+        // Ao abrir o app e sempre que ele volta para a frente: antes junta os dados da cópia no Google Drive (se mudou em
+        // outro computador) e depois acompanha a pasta de modelos (como no Mac).
+        Activated += (_, _) => Ui.ExecutarAsync(async () =>
+        {
+            await Arm.SincronizarDriveAoVoltarAsync();
+            await Sincronizar();
+        });
         Closing += (_, e) =>
         {
+            if (_fechandoDepoisDoDrive) return;
             if (Arm.ProcessandoFila && !Ui.Confirmar("A fila ainda está enviando documentos ao Word.", "Fechar agora pode deixar a impressão incompleta. Fechar mesmo assim?", true))
+            {
                 e.Cancel = true;
+                return;
+            }
+            // Antes de fechar, envia ao Google Drive as mudanças que ainda esperavam o envio (no máximo 15 segundos;
+            // sem internet, fecha assim mesmo).
+            if (Arm.EnvioPendente && Arm.GoogleConectado)
+            {
+                e.Cancel = true;
+                _fechandoDepoisDoDrive = true;
+                Title = "Orthck — enviando ao Google Drive…";
+                Ui.ExecutarAsync(async () =>
+                {
+                    try { await Task.WhenAny(Arm.EnviarPendenteAoDriveAsync(), Task.Delay(TimeSpan.FromSeconds(15))); }
+                    finally { Close(); }
+                });
+            }
         };
         PreviewKeyDown += AoTeclar;
         // Documentos impressos ficam 2 minutos na fila como "Enviado" e depois saem sozinhos (como no Mac).
@@ -74,6 +104,11 @@ public sealed class JanelaPrincipal : Window
             catch (Exception ex) { Registro.Erro("limpar enviados da fila", ex); }
         };
         relogio.Start();
+        // Com o Google Drive conectado, confere a cópia a cada 30 segundos (traz o que mudou no outro computador e envia
+        // o que mudou aqui).
+        var nuvem = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+        nuvem.Tick += (_, _) => { if (Arm.GoogleConectado && !Capturas.Ativo) Ui.ExecutarAsync(Arm.SincronizarDriveAsync); };
+        nuvem.Start();
         Mostrar(Secao.Gerar);
         AtualizarLateral();
     }
@@ -93,10 +128,10 @@ public sealed class JanelaPrincipal : Window
         DockPanel.SetDock(cabecalho, Dock.Top);
         doca.Children.Add(cabecalho);
 
-        var rodape = new Border { Padding = new Thickness(14), BorderThickness = new Thickness(0, 1, 0, 0), Child = _rodapeLateral };
+        // O rodapé (backup, impressora, ajustes) fica embaixo; numa janela baixa, ele rola em vez de esconder as seções.
+        var rodape = new Border { Padding = new Thickness(14), BorderThickness = new Thickness(0, 1, 0, 0), Child = _rodapeLateral, VerticalAlignment = VerticalAlignment.Bottom };
         rodape.SetResourceReference(Border.BorderBrushProperty, Tema.Borda);
-        DockPanel.SetDock(rodape, Dock.Bottom);
-        doca.Children.Add(rodape);
+        var rolagemDoRodape = new ScrollViewer { Content = rodape, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
 
         foreach (var (secao, titulo, glifo) in Secoes)
         {
@@ -119,7 +154,14 @@ public sealed class JanelaPrincipal : Window
         }
         _navegacao.Margin = new Thickness(8, 10, 8, 10);
         _navegacao.SelectionChanged += (_, _) => { if (_navegacao.SelectedItem is ListBoxItem { Tag: Secao s } && s != SecaoAtual) Mostrar(s); };
-        doca.Children.Add(_navegacao);
+        ScrollViewer.SetVerticalScrollBarVisibility(_navegacao, ScrollBarVisibility.Disabled);
+        var corpo = new Grid();
+        corpo.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        corpo.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        corpo.Children.Add(_navegacao);
+        Grid.SetRow(rolagemDoRodape, 1);
+        corpo.Children.Add(rolagemDoRodape);
+        doca.Children.Add(corpo);
 
         var borda = new Border { Child = doca, BorderThickness = new Thickness(0, 0, 1, 0) };
         borda.SetResourceReference(Border.BackgroundProperty, Tema.Lateral);
@@ -141,6 +183,7 @@ public sealed class JanelaPrincipal : Window
         _tela.Content = secao switch
         {
             Secao.Gerar => _gerar ??= new GerarView(this),
+            Secao.Prontuario => _prontuario ??= new ProntuarioView(this),
             Secao.Fila => new FilaView(this),
             Secao.Pacientes => new PacientesView(this),
             Secao.Locais => new LocaisView(this),
@@ -150,12 +193,14 @@ public sealed class JanelaPrincipal : Window
             _ => new TabelaCodigosView(TabelaDeCodigos.Sigtap, "sigtap"),
         };
         if (secao == Secao.Gerar) _gerar!.AoAparecer();
+        if (secao == Secao.Prontuario) _prontuario!.AoAparecer();
     }
 
     /// <summary>Recria a tela atual (depois de importar dados ou mudar o tamanho do texto).</summary>
     public void Recarregar()
     {
         _gerar = null;
+        _prontuario = null;
         Mostrar(SecaoAtual);
         AtualizarLateral();
     }
@@ -165,21 +210,11 @@ public sealed class JanelaPrincipal : Window
     {
         if (_contagemFila != null) _contagemFila.Text = Arm.PendentesNaFila > 0 ? Arm.PendentesNaFila.ToString() : "";
         // Só refaz o rodapé quando algo dele mudou (não a cada tecla digitada num cadastro).
-        var chave = $"{Arm.Dados.PastaSincronizada.Length > 0}|{_compactando}|{Ajustes.Atual.Impressora}|{_impressoras?.Count}";
+        var chave = $"{Arm.Dados.PastaSincronizada.Length > 0}|{_compactando}|{Ajustes.Atual.Impressora}|{_impressoras?.Count}|{Arm.GoogleConectado}|{Arm.SincronizandoDrive}|{Arm.EnvioPendente}|{Arm.SituacaoNuvem}|{Arm.EnviandoPastaAoDrive}";
         if (chave == _chaveDoRodape) return;
         _chaveDoRodape = chave;
         _rodapeLateral.Children.Clear();
-        if (Arm.Dados.PastaSincronizada.Length > 0)
-        {
-            var pasta = Ui.Coluna(6);
-            pasta.Add(Ui.TituloSecao("Pasta de modelos", Ui.GZip));
-            var compactar = Ui.Botao(_compactando ? "Compactando…" : "Compactar (.zip)…", () => Ui.ExecutarAsync(() => Compactar()), glifo: Ui.GZip,
-                dica: "Cria um .zip com todos os arquivos da pasta sincronizada (e uma cópia dos dados)");
-            compactar.IsEnabled = !_compactando;
-            compactar.HorizontalAlignment = HorizontalAlignment.Stretch;
-            pasta.Add(compactar);
-            _rodapeLateral.Add(pasta);
-        }
+        _rodapeLateral.Add(SecaoBackup());
         var impressora = Ui.Coluna(6);
         impressora.Add(Ui.TituloSecao("Impressora", Ui.GImpressora));
         _rodapeLateral.Add(impressora);
@@ -191,16 +226,102 @@ public sealed class JanelaPrincipal : Window
             dica: "A fila não envia mais nada e os documentos que já estão na impressora são cancelados");
         parar.HorizontalAlignment = HorizontalAlignment.Stretch;
         impressora.Add(parar);
-        var dados = Ui.Coluna(6);
-        dados.Add(Ui.TituloSecao("Dados", Ui.GBackup));
-        var importar = Ui.Botao("Importar dados (.json)…", () => ImportarDados(), glifo: Ui.GImportar,
-            dica: "Pacientes, locais, modelos, tipos, histórico e fila de um dados.json do Mac ou de um backup");
-        importar.HorizontalAlignment = HorizontalAlignment.Stretch;
-        dados.Add(importar);
-        _rodapeLateral.Add(dados);
         var ajustes = Ui.Botao("Ajustes…", AbrirAjustes, glifo: Ui.GEngrenagem, dica: "Aparência, dados e backup (Ctrl+,)");
         ajustes.HorizontalAlignment = HorizontalAlignment.Stretch;
         _rodapeLateral.Add(ajustes);
+    }
+
+    /// <summary>Backup (como no Mac): compactar a pasta (com os dados), importar um arquivo de dados .json, enviar a pasta
+    /// ao Google Drive e a cópia automática dos dados no Google Drive.</summary>
+    private FrameworkElement SecaoBackup()
+    {
+        var backup = Ui.Coluna(6);
+        backup.Add(Ui.TituloSecao("Backup", Ui.GZip));
+        Button Largo(Button b) { b.HorizontalAlignment = HorizontalAlignment.Stretch; return b; }
+        var temPasta = Arm.Dados.PastaSincronizada.Length > 0;
+        if (temPasta)
+        {
+            var compactar = Largo(Ui.Botao(_compactando ? "Compactando…" : "Compactar (.zip)…", () => Ui.ExecutarAsync(() => Compactar()), glifo: Ui.GZip,
+                dica: "Cria um .zip com todos os arquivos da pasta sincronizada e os dados do app"));
+            compactar.IsEnabled = !_compactando;
+            backup.Add(compactar);
+        }
+        backup.Add(Largo(Ui.Botao("Importar dados (.json)…", () => ImportarDados(), glifo: Ui.GImportar,
+            dica: "Traz pacientes, locais, histórico e fila de um backup (dados.json ou “Orthck - dados (backup).json”)")));
+        if (temPasta)
+        {
+            var enviar = Largo(Ui.Botao(Arm.EnviandoPastaAoDrive ? "Enviando…" : "Enviar pasta ao Google Drive", () => Ui.ExecutarAsync(EnviarPastaAoDrive), glifo: Ui.GEnviar,
+                dica: "Manda ao Google Drive um .zip com a pasta sincronizada inteira e os dados do app (substitui o anterior)"));
+            enviar.IsEnabled = !Arm.EnviandoPastaAoDrive;
+            backup.Add(enviar);
+            if (Ajustes.Atual.UltimoEnvioPastaDrive is { } quando)
+                backup.Add(Ui.Texto($"Pasta enviada em {quando.LocalDateTime:dd/MM/yyyy HH:mm}", Estilo.Legenda, Tema.TextoSecundario));
+        }
+        backup.Add(CopiaNaNuvem(), 4);
+        return backup;
+    }
+
+    /// <summary>Cópia automática dos dados no Google Drive: conectar, ou a situação e o menu (sincronizar, abrir, desconectar).</summary>
+    private FrameworkElement CopiaNaNuvem()
+    {
+        var p = Ui.Coluna(2);
+        if (!Arm.GoogleConectado)
+        {
+            var conectar = Ui.Botao("Conectar ao Google Drive…", () => ConectarGoogle(), glifo: Ui.GNuvem,
+                dica: "Guarda os dados no seu Google Drive e, ao abrir o app, traz o que mudou em outro computador");
+            conectar.HorizontalAlignment = HorizontalAlignment.Stretch;
+            p.Add(conectar);
+        }
+        else
+        {
+            var menu = new ContextMenu();
+            void Opcao(string titulo, Action acao)
+            {
+                var item = new MenuItem { Header = titulo };
+                item.Click += (_, _) => Ui.Executar(acao);
+                menu.Items.Add(item);
+            }
+            Opcao("Sincronizar agora", () => Ui.ExecutarAsync(Arm.SincronizarDriveAsync));
+            if (Arm.EnderecoNoDrive is { } endereco) Opcao("Abrir no navegador", () => Ui.AbrirEndereco(endereco));
+            menu.Items.Add(new Separator());
+            Opcao("Desconectar", () =>
+            {
+                if (Ui.Confirmar("Desconectar do Google Drive?", "Os dados deixam de ir para o Drive. Nada é apagado aqui nem no Drive.")) Arm.DesconectarGoogle();
+            });
+            var mais = Ui.BotaoIcone(Ui.GMaisOpcoes, "Opções do Google Drive", () => { });
+            mais.Click += (_, _) => { menu.PlacementTarget = mais; menu.IsOpen = true; };
+            var titulo = Ui.Linha(6, Ui.Icone(Arm.SincronizandoDrive ? Ui.GSincronizar : Ui.GNuvem, 14), Ui.Texto("Google Drive"));
+            p.Add(Ui.Extremos(titulo, mais));
+            if (Arm.SituacaoNuvem.Length > 0) p.Add(Quebra(Ui.Texto(Arm.SituacaoNuvem, Estilo.Legenda, Tema.TextoSecundario)));
+            if (Arm.EnvioPendente) p.Add(Quebra(Ui.Texto("Mudanças vão para o Drive em até 30 segundos (ou ao fechar o app).", Estilo.Legenda, Tema.TextoSecundario)));
+        }
+        if (!Arm.GoogleConectado && Arm.SituacaoNuvem.Length > 0) p.Add(Quebra(Ui.Texto(Arm.SituacaoNuvem, Estilo.Legenda, Tema.TextoSecundario)));
+        return p;
+    }
+
+    private static TextBlock Quebra(TextBlock t) { t.TextWrapping = TextWrapping.Wrap; return t; }
+
+    /// <summary>Abre a janela de conexão; devolve true se ficou conectado.</summary>
+    public bool ConectarGoogle()
+    {
+        new ConectarGoogleJanela(Arm) { Owner = this }.ShowDialog();
+        AtualizarLateral();
+        return Arm.GoogleConectado;
+    }
+
+    private async Task EnviarPastaAoDrive()
+    {
+        if (!Arm.GoogleConectado && !ConectarGoogle()) return;
+        try
+        {
+            var bytes = await Arm.EnviarPastaAoGoogleDriveAsync();
+            Ajustes.Atual.UltimoEnvioPastaDrive = DateTimeOffset.Now;
+            Ajustes.Salvar();
+            _chaveDoRodape = null;
+            AtualizarLateral();
+            Ui.Informar($"Pasta enviada ao seu Google Drive como “{Armazenamento.NomeDoZipNoDrive}” ({bytes / 1024.0 / 1024.0:0.0} MB), com o backup dos dados. O envio anterior foi substituído.");
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { Ui.Erro(ex.Message); }
     }
 
     private List<string>? _impressoras;
@@ -296,17 +417,18 @@ public sealed class JanelaPrincipal : Window
     {
         var dialogo = new Microsoft.Win32.OpenFileDialog
         {
-            Title = "Escolha o arquivo de dados do Orthck (.json)",
-            Filter = "Dados do Orthck (*.json)|*.json|Todos os arquivos|*.*"
+            Title = "Escolha o arquivo de dados do Orthck (dados.json, um backup da pasta Backups ou o “Orthck - dados (backup).json” do .zip)",
+            Filter = "Dados do Orthck (*.json)|*.json|Todos os arquivos|*.*",
+            InitialDirectory = Arm.PastaBackups
         };
         if (dialogo.ShowDialog(this) != true) return false;
-        if (!Ui.Confirmar($"Importar “{Path.GetFileName(dialogo.FileName)}”?",
-            "Os pacientes, locais, modelos, histórico e fila deste computador serão substituídos pelos do arquivo. Uma cópia dos dados atuais fica guardada em Backups (Ajustes › Restaurar um backup).", true)) return false;
+        var modo = new ImportarDadosJanela(Path.GetFileName(dialogo.FileName)) { Owner = this }.Perguntar();
+        if (modo == null) return false;
         try
         {
-            var resumo = Arm.ImportarDadosDoMac(dialogo.FileName);
+            var resumo = Arm.ImportarDados(dialogo.FileName, modo.Value);
             Recarregar();
-            Ui.Informar($"Dados importados: {resumo}");
+            Ui.Informar(resumo);
             return true;
         }
         catch (Exception ex) { Ui.Erro(ex.Message); return false; }
@@ -322,17 +444,36 @@ public sealed class JanelaPrincipal : Window
         var ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
         var shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
         if (!ctrl) return;
-        if (shift && e.Key == Key.N)
+        if (!shift && e.Key == Key.B && Keyboard.FocusedElement is TextBox { IsReadOnly: false } campo)
         {
-            // Próximo paciente (⇧⌘N no Mac).
-            Mostrar(Secao.Gerar);
-            _gerar?.ProximoPaciente();
+            // Negrito (⌘B no Mac): o trecho fica entre ** e sai em negrito no Word.
+            AlternarNegrito(campo);
+            e.Handled = true;
+        }
+        else if (shift && e.Key == Key.N)
+        {
+            // Próximo paciente (⇧⌘N no Mac): no Prontuário, o do Prontuário; nas outras telas, o do Gerar documento.
+            if (SecaoAtual == Secao.Prontuario) _prontuario?.ProximoPaciente();
+            else
+            {
+                Mostrar(Secao.Gerar);
+                _gerar?.ProximoPaciente();
+            }
             e.Handled = true;
         }
         else if (e.Key is Key.OemPlus or Key.Add) { MudarTamanho(+1); e.Handled = true; }
         else if (e.Key is Key.OemMinus or Key.Subtract) { MudarTamanho(-1); e.Handled = true; }
         else if (e.Key is Key.D0 or Key.NumPad0) { MudarTamanho(0, absoluto: true); e.Handled = true; }
         else if (e.Key == Key.OemComma) { AbrirAjustes(); e.Handled = true; }
+    }
+
+    /// <summary>Põe ou tira "**" em volta do trecho selecionado (sem seleção, abre "****" com o cursor no meio).</summary>
+    public static void AlternarNegrito(TextBox campo)
+    {
+        var (texto, inicio, tamanho) = Negrito.Alternar(campo.Text, campo.SelectionStart, campo.SelectionLength);
+        campo.Text = texto;
+        campo.Select(inicio, tamanho);
+        campo.Focus();
     }
 
     public void MudarTamanho(int passo, bool absoluto = false)

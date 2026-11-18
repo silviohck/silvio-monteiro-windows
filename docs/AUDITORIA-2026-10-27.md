@@ -62,3 +62,20 @@ O proprietário relatou que a versão Windows estava "praticamente não utilizá
 | Lista de Pacientes lenta com muito histórico | Locais por paciente calculados uma vez | Automatizado |
 | Caminho acima de 259 caracteres (o Word não abre) | Nome do documento encurtado, mantendo modelo, paciente e data | Automatizado |
 
+
+## 18/11/2026 — Alterações do Mac portadas (até 17/11/2026)
+
+Pedido do proprietário: "porte todas as alterações que fizemos no app do Mac para o Windows". Parte já tinha sido portada em 06/11 (PR #9: favoritos, painel de atendidos, documentos temporários, parar impressões). Agora entram as demais:
+
+- **Prontuário** (aba nova): fichas prontas de Araruna (CER II) e Alagoa Grande, importar ficha, linhas da ficha, 1.050 modelos de atendimento com lado e concordância, favoritos por local, "Meus modelos", Tab nos `___`, "Tirar os ___ não preenchidos", Limpar, Próximo paciente. As regras ficam em `Orthck.Core` (`Prontuario`, `Lacunas`, `ModelosDeAtendimento`) e têm testes.
+- **Negrito** (Ctrl+B) em qualquer campo; o DOCX sai com o trecho num run em negrito com a mesma fonte.
+- **Google Drive**: cópia automática do `dados.json` e envio da pasta em .zip. Fica desligado até o médico conectar; o login é pelo navegador e o app só vê os arquivos que ele mesmo cria (`drive.file`). Decisão do proprietário (o CLAUDE.md punha a sincronização em nuvem por último): risco de LGPD a avaliar, porque os dados clínicos passam a ficar também no Google Drive da conta do médico.
+- **Cadastro**: número, bairro, cidade, UF, CEP e CNS.
+- **Importar dados**: Juntar ou Substituir. Juntar acrescenta nos dados abertos (as telas guardam referências) e desfaz se a gravação falhar.
+- **Fila**: "Limpar fila". **Atendidos recentemente**: "Limpar" e "Tirar desta lista".
+- **Impressão**: antes de imprimir, confere que o Word abriu exatamente o arquivo (não um de mesmo nome de outra pasta) e que ele está à frente; senão, "Erro" sem enviar nada.
+- Tabela CID-10: correção do Q72.4 (igual ao Mac).
+
+Invariantes mantidos: A → B → A no Prontuário (trocar de paciente limpa o atendimento; só a identificação vai para o cadastro, testado); a junção nunca apaga nada; a fila continua sem reenvio automático. 91 testes de regressão.
+
+Riscos remanescentes: Word e impressora reais; Google Drive com a conta real e com o Mac ao mesmo tempo (a mesma credencial do Google Cloud precisa estar nos Secrets dos dois repositórios); aparência da ficha impressa no Windows.

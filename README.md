@@ -53,6 +53,14 @@ O workflow **Windows — compilar e testar Orthck** também publica uma compila�
 
 Os dados ficam **somente neste computador**, em `%LOCALAPPDATA%\Orthck` (`dados.json`, a pasta `Modelos` e os backups diários em `Backups`). Nunca envie esse conteúdo, documentos de pacientes ou logs com informações reais para um repositório público. Antes de atender pacientes, use uma conta do Windows com senha, disco criptografado (BitLocker) e um backup fora do computador.
 
+## Prontuário
+
+Aba **Prontuário**: escolha o local e a ficha (já vêm a *Avaliação ortopédica – Araruna (CER II)* e o *Prontuário médico – Alagoa Grande*, ligadas ao local de mesmo nome), digite o paciente e preencha o atendimento. **Modelo de atendimento**: busque a doença ou o CID (ex.: gonartrose, M54), escolha o lado e clique: Q.P., H.D.A., exame físico, diagnóstico, CID e programação são preenchidos nas linhas da ficha. **Tab** pula para o próximo `___`; **Ctrl+Enter** gera o prontuário em Word. **Ctrl+B** põe o trecho selecionado em negrito (em qualquer campo).
+
+## Backup e Google Drive
+
+Na barra lateral, em **Backup**: *Compactar (.zip)…*, *Importar dados (.json)…* (**Juntar** ou **Substituir**), *Enviar pasta ao Google Drive* e *Conectar ao Google Drive…*. Conectado, o app guarda “Orthck - dados.json” no Drive e junta o que mudou em outro computador (Mac ou Windows) com a mesma conta. Nada vai para o Drive sem conectar. A credencial do Google entra no app pelos Secrets `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET` do repositório (os mesmos do Mac); sem eles, a janela pede o arquivo `client_secret….json`.
+
 ## Tabelas CID-10 / SIGTAP
 
 Vêm embutidas no app (as mesmas do Mac) e funcionam sem internet. Para atualizar depois que o projeto Mac atualizar as dele:

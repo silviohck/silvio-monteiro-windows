@@ -39,6 +39,14 @@ public sealed class Paciente
     public string Telefone { get; set; } = "";
     public string Email { get; set; } = "";
     public string Endereco { get; set; } = "";
+    /// <summary>Número, bairro, cidade, UF e CEP do endereço (pedidos em fichas como a de Araruna).</summary>
+    public string Numero { get; set; } = "";
+    public string Bairro { get; set; } = "";
+    public string Cidade { get; set; } = "";
+    public string Uf { get; set; } = "";
+    public string Cep { get; set; } = "";
+    /// <summary>Cartão Nacional de Saúde (CNS / cartão do SUS).</summary>
+    public string Cns { get; set; } = "";
     public string Convenio { get; set; } = "";
     public string Observacoes { get; set; } = "";
     /// <summary>Local onde o paciente é atendido (opcional).</summary>
@@ -114,6 +122,26 @@ public sealed class ItemFilaImpressao
     [JsonExtensionData] public Dictionary<string, JsonElement>? Outros { get; set; }
 }
 
+/// <summary>Texto pronto para o prontuário (Q.P., H.D.A., exame físico, diagnóstico, CID e programação terapêutica).
+/// "[LADO]" vira DIREITO, ESQUERDO ou BILATERAL; "___" se completa na consulta.</summary>
+public sealed class ModeloDeAtendimento
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string Grupo { get; set; } = "Meus modelos";
+    public string Nome { get; set; } = "";
+    public string Cid { get; set; } = "";
+    public string Diagnostico { get; set; } = "";
+    public string Qp { get; set; } = "";
+    public string Hda { get; set; } = "";
+    public string Exame { get; set; } = "";
+    public string Conduta { get; set; } = "";
+    /// <summary>Modelo por tipo de CID (mais genérico, com mais ___).</summary>
+    public bool Generico { get; set; }
+    /// <summary>Salvo pelo médico ("Salvar como meu modelo"): fica nos dados do app e vem primeiro na busca.</summary>
+    public bool Meu { get; set; }
+    [JsonExtensionData] public Dictionary<string, JsonElement>? Outros { get; set; }
+}
+
 public sealed class DadosApp
 {
     public static readonly string[] CategoriasPadrao = ["Receitas", "Atestados", "Laudos", "Relatórios médicos", "Radiografias", "Outros"];
@@ -141,6 +169,13 @@ public sealed class DadosApp
     /// <summary>Favoritos de cada local (id do local em maiúsculas, como no Mac; "" = sem local): nomes dos modelos,
     /// na ordem escolhida. Um local não vê os favoritos de outro.</summary>
     public Dictionary<string, List<string>> FavoritosPorLocal { get; set; } = [];
+    /// <summary>Fichas do Prontuário (ex.: Avaliação ortopédica de Araruna): .docx com {{CAMPOS}}, na pasta Modelos.</summary>
+    public List<ModeloDocumento> Fichas { get; set; } = [];
+    /// <summary>Modelos de atendimento salvos pelo médico no Prontuário ("Salvar como meu modelo").</summary>
+    public List<ModeloDeAtendimento> ModelosDeAtendimento { get; set; } = [];
+    /// <summary>Favoritos do Modelo de atendimento de cada local (id do local em maiúsculas; "" = sem local), na ordem
+    /// escolhida. Cada item é "CID|nome" (modelo do app) ou "meu:&lt;id&gt;" (modelo salvo pelo médico).</summary>
+    public Dictionary<string, List<string>> FavoritosDeAtendimento { get; set; } = [];
 
     /// <summary>Sem diferenciar maiúsculas e acentos ("1 - Apac" = "1 - APAC").</summary>
     public bool EhCompartilhada(string pasta) => PastasCompartilhadas.Any(x => Texto.Iguais(x, pasta));

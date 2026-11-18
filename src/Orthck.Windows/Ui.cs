@@ -24,7 +24,8 @@ public static class Ui
         GFechar = "\uE711", GFecharCirculo = "\uE711", GVoltar = "\uE72B", GProximo = "\uE72A", GAtualizar = "\uE72C", GZip = "\uF012",
         GSalvar = "\uE74E", GCampos = "\uE8FD", GTelefone = "\uE717", GNota = "\uE70B", GMundo = "\uE774", GSetaBaixo = "\uE70D",
         GTrocar = "\uE8AB", GAbrir = "\uE8E5", GImportar = "\uE896", GPaleta = "\uE790", GBackup = "\uE777",
-        GEstrela = "\uE734", GEstrelaCheia = "\uE735", GParar = "\uE71A";
+        GEstrela = "\uE734", GEstrelaCheia = "\uE735", GParar = "\uE71A",
+        GProntuario = "\uE9F9", GNuvem = "\uE753", GEnviar = "\uE898", GNegrito = "\uE8DD", GBorracha = "\uE75C", GMaisOpcoes = "\uE712";
 
     public static TextBlock Texto(string texto, Estilo estilo = Estilo.Normal, string? cor = null)
     {
@@ -344,6 +345,9 @@ public static class Ui
         if (!File.Exists(caminho) && !Directory.Exists(caminho)) throw new FileNotFoundException($"Não encontrado: {caminho}");
         Process.Start(new ProcessStartInfo(caminho) { UseShellExecute = true });
     });
+
+    /// <summary>Abre um endereço da internet no navegador padrão.</summary>
+    public static void AbrirEndereco(string endereco) => Executar(() => Process.Start(new ProcessStartInfo(endereco) { UseShellExecute = true }));
 
     /// <summary>Abre o Explorador com o arquivo selecionado ("Mostrar no Finder").</summary>
     public static void MostrarNaPasta(string caminho) => Executar(() =>

@@ -50,7 +50,9 @@ public sealed partial class Armazenamento
         Pasta = pasta ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Orthck");
         Directory.CreateDirectory(PastaModelos);
         Carregar();
-        if (SepararFavoritosPorLocal()) { try { Salvar(); } catch { } }
+        var mudou = SepararFavoritosPorLocal();
+        mudou |= InstalarFichasProntas();
+        if (mudou) { try { Salvar(); } catch { } }
         LimparDocumentosTemporarios();
     }
 
@@ -100,6 +102,14 @@ public sealed partial class Armazenamento
         dados.Categorias ??= [.. DadosApp.CategoriasPadrao];
         dados.PastasIgnoradas ??= []; dados.PastasCompartilhadas ??= [.. DadosApp.PastasCompartilhadasPadrao];
         dados.PastaSincronizada ??= ""; dados.PastaDocumentos ??= "";
+        dados.Favoritos ??= []; dados.FavoritosPorLocal ??= []; dados.Fichas ??= [];
+        dados.ModelosDeAtendimento ??= []; dados.FavoritosDeAtendimento ??= [];
+        foreach (var f in dados.Fichas) { f.Campos ??= []; f.Nome ??= ""; f.Arquivo ??= ""; f.Categoria ??= "Prontuário"; }
+        foreach (var p in dados.Pacientes)
+        {
+            p.Nome ??= ""; p.Cpf ??= ""; p.Rg ??= ""; p.DataNascimento ??= ""; p.Telefone ??= ""; p.Email ??= ""; p.Endereco ??= "";
+            p.Numero ??= ""; p.Bairro ??= ""; p.Cidade ??= ""; p.Uf ??= ""; p.Cep ??= ""; p.Cns ??= ""; p.Convenio ??= ""; p.Observacoes ??= "";
+        }
         foreach (var m in dados.Modelos) { m.Campos ??= []; m.Categoria ??= "Outros"; m.Nome ??= ""; m.Arquivo ??= ""; }
         // Versões anteriores tinham uma lista de tipos só: cada local passa a ter a sua.
         foreach (var local in dados.Locais)
@@ -130,6 +140,7 @@ public sealed partial class Armazenamento
     {
         FazerBackupDoDia();
         Gravar(Dados, ArquivoDados);
+        MarcarEnvioAoDrive();
         Mudou?.Invoke();
     }
 
@@ -206,58 +217,154 @@ public sealed partial class Armazenamento
         if (File.Exists(atual)) File.Replace(tmp, atual, null, ignoreMetadataErrors: true); else File.Move(tmp, atual);
     }
 
-    // MARK: Importação do Mac
+    // MARK: Importar dados (.json)
 
-    /// <summary>
-    /// Substitui os dados pelos do dados.json do Mac. Os dados atuais vão antes para Backups; se houver uma pasta
-    /// Modelos ao lado do arquivo (pasta de dados do Mac copiada inteira), as cópias dos modelos vêm junto.
-    /// Devolve um resumo do que foi importado.
-    /// </summary>
-    public string ImportarDadosDoMac(string arquivo)
+    public enum ModoDeImportacao
     {
-        if (ProcessandoFila) throw new InvalidOperationException("Aguarde a fila de impressão terminar antes de importar.");
-        // A ausência do arquivo não é um cadastro vazio: nunca apagar os dados do Windows.
-        if (!File.Exists(arquivo)) throw new FileNotFoundException("O arquivo de dados do Mac não foi encontrado. Nada foi alterado.", arquivo);
-        DadosApp novos;
+        /// <summary>Acrescenta pacientes, locais, histórico e fila que ainda não existem aqui.</summary>
+        Juntar,
+        /// <summary>Troca todos os dados pelos do arquivo (restaurar um backup ou trazer do Mac).</summary>
+        Substituir
+    }
+
+    /// <summary>Lê um dados.json sem alterar nada; erro claro se o arquivo não existe ou não é do Orthck.</summary>
+    private static DadosApp LerArquivoDeDados(string arquivo)
+    {
+        // A ausência do arquivo não é um cadastro vazio: nunca apagar os dados deste computador.
+        if (!File.Exists(arquivo)) throw new FileNotFoundException("O arquivo de dados não foi encontrado. Nada foi alterado.", arquivo);
         try
         {
-            novos = JsonSerializer.Deserialize<DadosApp>(File.ReadAllText(arquivo), Json) ?? throw new JsonException("O arquivo está vazio.");
+            var lidos = JsonSerializer.Deserialize<DadosApp>(File.ReadAllText(arquivo), Json) ?? throw new JsonException("O arquivo está vazio.");
+            Normalizar(lidos);
+            return lidos;
         }
         catch (JsonException ex)
         {
-            throw new InvalidDataException($"O arquivo não é um dados.json válido do Orthck. Nada foi alterado. ({ex.Message})", ex);
+            throw new InvalidDataException($"“{Path.GetFileName(arquivo)}” não é um arquivo de dados do Orthck. Nada foi alterado. ({ex.Message})", ex);
         }
-        Normalizar(novos);
+    }
+
+    /// <summary>
+    /// Importa um dados.json (do Mac, de um backup diário ou do .zip). Antes, guarda uma cópia dos dados atuais em Backups.
+    /// <paramref name="deOutroComputador"/>: junção automática da cópia no Google Drive — sem cópia de segurança a cada vez e
+    /// sem a fila de impressão (ela é de cada computador). Devolve um resumo do que entrou.
+    /// </summary>
+    public string ImportarDados(string arquivo, ModoDeImportacao modo, bool deOutroComputador = false)
+    {
+        if (ProcessandoFila && !deOutroComputador) throw new InvalidOperationException("Aguarde a fila de impressão terminar antes de importar.");
+        var importados = LerArquivoDeDados(arquivo);
+        if (!deOutroComputador && File.Exists(ArquivoDados))
+        {
+            Directory.CreateDirectory(PastaBackups);
+            File.Copy(ArquivoDados, Path.Combine(PastaBackups, $"antes-de-importar-{DateTime.Now:yyyy-MM-dd-HHmmss}.json"), overwrite: true);
+        }
+        return modo == ModoDeImportacao.Substituir ? Substituir(arquivo, importados) : Juntar(importados, deOutroComputador);
+    }
+
+    /// <summary>Compatibilidade: importar do Mac é substituir os dados pelos do arquivo.</summary>
+    public string ImportarDadosDoMac(string arquivo) => ImportarDados(arquivo, ModoDeImportacao.Substituir);
+
+    private string Substituir(string arquivo, DadosApp novos)
+    {
         MarcarEnviosInterrompidos(novos);
-        // Caminhos do Mac (/Users/…) não existem no Windows.
-        if (novos.PastaSincronizada.StartsWith('/')) novos.PastaSincronizada = "";
-        if (novos.PastaDocumentos.StartsWith('/')) novos.PastaDocumentos = "";
+        // Pastas de outro computador (do Mac: /Users/…) podem não existir neste: mantém as daqui.
+        if (novos.PastaSincronizada.Length > 0 && (novos.PastaSincronizada.StartsWith('/') || !Directory.Exists(novos.PastaSincronizada)))
+            novos.PastaSincronizada = Dados.PastaSincronizada;
+        if (novos.PastaDocumentos.Length > 0 && (novos.PastaDocumentos.StartsWith('/') || !Directory.Exists(novos.PastaDocumentos)))
+            novos.PastaDocumentos = Dados.PastaDocumentos;
         foreach (var local in novos.Locais.Where(l => l.Pasta.StartsWith('/'))) local.Pasta = "";
 
+        // Se houver a pasta Modelos ao lado do arquivo (pasta de dados do Mac copiada inteira), as cópias vêm junto.
         var modelosDoMac = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(arquivo))!, "Modelos");
-        int copiados = 0, faltando = 0;
-        foreach (var modelo in novos.Modelos)
+        int copiados = 0;
+        foreach (var modelo in novos.Modelos.Concat(novos.Fichas))
         {
             var destino = UrlDoModelo(modelo);
             var origem = Path.Combine(modelosDoMac, modelo.Arquivo);
-            if (File.Exists(destino)) continue;
-            if (File.Exists(origem)) { File.Copy(origem, destino); copiados++; }
-            else if (modelo.Origem == null) faltando++; // os da pasta sincronizada voltam ao sincronizar
+            if (modelo.Arquivo.Length == 0 || File.Exists(destino) || !File.Exists(origem)) continue;
+            File.Copy(origem, destino);
+            copiados++;
         }
+        // Modelos importados à mão cujo arquivo não está neste computador não funcionariam; os da pasta sincronizada
+        // são copiados de novo na próxima sincronização.
+        var semArquivo = novos.Modelos.RemoveAll(m => m.Origem == null && !File.Exists(UrlDoModelo(m)));
 
-        Directory.CreateDirectory(PastaBackups);
-        if (File.Exists(ArquivoDados))
-            File.Copy(ArquivoDados, Path.Combine(PastaBackups, $"antes-importacao-{DateTime.Now:yyyyMMdd-HHmmss}.json"));
         // Primeiro grava; só então a sessão passa a usar os dados novos.
         Gravar(novos, ArquivoDados);
         Dados = novos;
+        if (InstalarFichasProntas()) Gravar(Dados, ArquivoDados);
         Mudou?.Invoke();
 
-        var resumo = $"{Texto.Plural(novos.Pacientes.Count, "paciente", "pacientes")}, {Texto.Plural(novos.Locais.Count, "local", "locais")}, " +
+        var resumo = $"Dados substituídos: {Texto.Plural(novos.Pacientes.Count, "paciente", "pacientes")}, {Texto.Plural(novos.Locais.Count, "local", "locais")}, " +
             $"{Texto.Plural(novos.Modelos.Count, "modelo", "modelos")} e {Texto.Plural(novos.Historico.Count, "documento", "documentos")} no histórico.";
         if (copiados > 0) resumo += $" {Texto.Plural(copiados, "arquivo de modelo copiado", "arquivos de modelo copiados")}.";
-        if (faltando > 0) resumo += $" {Texto.Plural(faltando, "modelo importado avulso ficou", "modelos importados avulsos ficaram")} sem arquivo: importe a pasta de dados do Mac inteira (com a pasta Modelos) ou importe esses modelos de novo.";
-        if (novos.Modelos.Any(m => m.Origem != null)) resumo += " Escolha a pasta sincronizada dos modelos neste computador (aba Modelos) para trazer os demais.";
+        if (semArquivo > 0) resumo += $" {Texto.Plural(semArquivo, "modelo importado à mão ficou", "modelos importados à mão ficaram")} de fora porque o arquivo não está neste computador: importe a pasta de dados do Mac inteira (com a pasta Modelos) ou importe esses modelos de novo.";
+        if (novos.Modelos.Any(m => m.Origem != null) && Dados.PastaSincronizada.Length == 0)
+            resumo += " Escolha a pasta sincronizada dos modelos neste computador (aba Modelos) para trazer os demais.";
+        return resumo;
+    }
+
+    private string Juntar(DadosApp importados, bool deOutroComputador)
+    {
+        // As telas guardam referências aos pacientes e locais: a junção acrescenta nos dados que já estão abertos
+        // (nada é trocado nem apagado) e desfaz os acréscimos se a gravação falhar.
+        var mapaDeLocais = new Dictionary<Guid, Guid>();
+        var locaisNovos = new List<LocalAtendimento>();
+        foreach (var local in importados.Locais)
+        {
+            if (Dados.Locais.Any(l => l.Id == local.Id)) mapaDeLocais[local.Id] = local.Id;
+            else if (Dados.Locais.Concat(locaisNovos).FirstOrDefault(l => Texto.MesmoNome(l.Nome, local.Nome)) is { } mesmo) mapaDeLocais[local.Id] = mesmo.Id;
+            else
+            {
+                if (local.Pasta.StartsWith('/')) local.Pasta = "";
+                locaisNovos.Add(local);
+                mapaDeLocais[local.Id] = local.Id;
+            }
+        }
+        var idsDosPacientes = Dados.Pacientes.Select(p => p.Id).ToHashSet();
+        var pacientesNovos = importados.Pacientes.Where(p => idsDosPacientes.Add(p.Id)).ToList();
+        foreach (var paciente in pacientesNovos)
+            paciente.LocalId = paciente.LocalId is Guid l && mapaDeLocais.TryGetValue(l, out var novo) ? novo : null;
+        var idsDoHistorico = Dados.Historico.Select(d => d.Id).ToHashSet();
+        var historicoNovo = importados.Historico.Where(d => idsDoHistorico.Add(d.Id)).ToList();
+        var idsDaFila = Dados.FilaImpressao.Select(i => i.Id).ToHashSet();
+        var filaNova = deOutroComputador ? []
+            : importados.FilaImpressao.Where(i => i.Situacao == SituacaoImpressao.Pendente && idsDaFila.Add(i.Id)).ToList();
+        // Favoritos marcados no outro computador também valem aqui, cada um no seu local.
+        var favoritosNovos = new List<(string Chave, string Nome)>();
+        foreach (var (chave, nomes) in importados.FavoritosPorLocal)
+        {
+            var existentes = Dados.FavoritosPorLocal.TryGetValue(chave, out var lista) ? lista : [];
+            foreach (var nome in nomes.Where(n => !existentes.Any(x => Texto.MesmoNome(x, n)) && !favoritosNovos.Any(f => f.Chave == chave && Texto.MesmoNome(f.Nome, n))))
+                favoritosNovos.Add((chave, nome));
+        }
+        var resumo = $"Dados juntados: {Texto.Plural(pacientesNovos.Count, "paciente", "pacientes")}, {Texto.Plural(locaisNovos.Count, "local", "locais")} e " +
+            $"{Texto.Plural(historicoNovo.Count, "documento", "documentos")} no histórico entraram.";
+        if (locaisNovos.Count + pacientesNovos.Count + historicoNovo.Count + filaNova.Count + favoritosNovos.Count == 0) return resumo;
+
+        var historicoAntes = Dados.Historico.ToList();
+        var favoritosAntes = Dados.FavoritosPorLocal.ToDictionary(x => x.Key, x => x.Value.ToList());
+        foreach (var local in locaisNovos) local.Tipos = local.Tipos.Count > 0 ? local.Tipos : [.. Dados.Categorias];
+        Dados.Locais.AddRange(locaisNovos);
+        Dados.Pacientes.AddRange(pacientesNovos);
+        Dados.Historico = [.. Dados.Historico.Concat(historicoNovo).OrderByDescending(d => d.Data)];
+        Dados.FilaImpressao.AddRange(filaNova);
+        foreach (var (chave, nome) in favoritosNovos)
+        {
+            if (!Dados.FavoritosPorLocal.TryGetValue(chave, out var lista)) Dados.FavoritosPorLocal[chave] = lista = [];
+            lista.Add(nome);
+        }
+        try { Gravar(Dados, ArquivoDados); }
+        catch
+        {
+            Dados.Locais.RemoveAll(locaisNovos.Contains);
+            Dados.Pacientes.RemoveAll(pacientesNovos.Contains);
+            Dados.Historico = historicoAntes;
+            Dados.FilaImpressao.RemoveAll(filaNova.Contains);
+            Dados.FavoritosPorLocal = favoritosAntes;
+            throw;
+        }
+        Mudou?.Invoke();
         return resumo;
     }
 

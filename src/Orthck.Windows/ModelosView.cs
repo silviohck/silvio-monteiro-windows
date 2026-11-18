@@ -297,6 +297,12 @@ public sealed class ModeloEditor : StackPanel
         var nome = Ui.CaixaDeTexto(modelo.Nome);
         nome.TextChanged += (_, _) => { modelo.Nome = nome.Text; arm.Salvar(); aoMudar(); };
         dados.Add(Ui.Rotulado("Nome", nome));
+        if (modelo.LocalId is Guid localDoModelo)
+        {
+            var favorito = new CheckBox { Content = "Favorito deste local (atalho em Gerar documento)", IsChecked = arm.EhFavorito(modelo, localDoModelo) };
+            favorito.Click += (_, _) => Ui.Executar(() => { arm.AlternarFavorito(modelo, localDoModelo); favorito.IsChecked = arm.EhFavorito(modelo, localDoModelo); });
+            dados.Add(Ui.Rotulado("", favorito));
+        }
         var locais = new List<(string, Guid?)> { ("Todos os locais", null) };
         locais.AddRange(arm.LocaisOrdenados.Select(l => (l.Nome.Length == 0 ? "Local sem nome" : l.Nome, (Guid?)l.Id)));
         var tipoHost = new ContentControl();
@@ -516,23 +522,23 @@ public sealed class Pergunta : Dialogo
     private readonly TextBox _caixa;
     private string? _resposta;
 
-    private Pergunta(string titulo, string mensagem, string dica) : base(titulo, 480, 260)
+    private Pergunta(string titulo, string mensagem, string dica, string valor = "", string botao = "Adicionar") : base(titulo, 480, 260)
     {
         var p = Ui.Coluna(12);
         p.Margin = new Thickness(22, 18, 22, 12);
         p.Add(Ui.Texto(titulo, Estilo.Secao));
         p.Add(Ui.Texto(mensagem, Estilo.Apoio));
-        _caixa = Ui.CaixaDeTexto(dica: dica);
+        _caixa = Ui.CaixaDeTexto(valor, dica: dica);
         p.Add(_caixa);
         Corpo = p;
         AdicionarBotao("Cancelar", Close);
-        AdicionarBotao("Adicionar", () => { _resposta = _caixa.Text; Close(); }, principal: true);
-        Loaded += (_, _) => _caixa.Focus();
+        AdicionarBotao(botao, () => { _resposta = _caixa.Text; Close(); }, principal: true);
+        Loaded += (_, _) => { _caixa.Focus(); _caixa.SelectAll(); };
     }
 
-    public static string? Texto(string titulo, string mensagem, string dica)
+    public static string? Texto(string titulo, string mensagem, string dica, string valor = "", string botao = "Adicionar")
     {
-        var p = new Pergunta(titulo, mensagem, dica) { Owner = Application.Current.MainWindow };
+        var p = new Pergunta(titulo, mensagem, dica, valor, botao) { Owner = Application.Current.MainWindow };
         p.ShowDialog();
         return p._resposta;
     }

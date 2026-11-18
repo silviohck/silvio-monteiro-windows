@@ -107,20 +107,85 @@ public static partial class DocxTemplate
         for (var i = 0; i < nodes.Length; i++)
         {
             if (original[i] == modified[i]) continue;
-            // Quebra de linha e tabulação viram w:br e w:tab; dentro de w:t o Word não as exibe.
-            var parts = BreakOrTab().Split(modified[i]);
-            nodes[i].Value = parts[0];
-            nodes[i].SetAttributeValue(XmlNs + "space", "preserve");
-            XNode after = nodes[i];
-            for (var j = 1; j + 1 < parts.Length; j += 2)
+            if (modified[i].Contains(Negrito.Marca) && nodes[i].Parent is { } run && run.Name == W + "r")
+                WriteWithBold(nodes[i], run, modified[i]);
+            else
+                WriteText(nodes[i], modified[i]);
+        }
+    }
+
+    /// <summary>Texto no w:t; quebra de linha e tabulação viram w:br e w:tab (dentro de w:t o Word não as exibe).
+    /// Devolve o último nó escrito.</summary>
+    private static XElement WriteText(XElement node, string text)
+    {
+        var parts = BreakOrTab().Split(text);
+        node.Value = parts[0];
+        node.SetAttributeValue(XmlNs + "space", "preserve");
+        var after = node;
+        for (var j = 1; j + 1 < parts.Length; j += 2)
+        {
+            var separator = new XElement(W + (parts[j] == "\t" ? "tab" : "br"));
+            after.AddAfterSelf(separator);
+            var nextText = new XElement(W + "t", new XAttribute(XmlNs + "space", "preserve"), parts[j + 1]);
+            separator.AddAfterSelf(nextText);
+            after = nextText;
+        }
+        return after;
+    }
+
+    /// <summary>
+    /// Negrito, como no Mac: o texto entre "**" (ex.: "DOR **INTENSA** À NOITE") vai para um run em negrito com a
+    /// mesma formatação do run original; o resto continua em runs iguais ao original. Marcas sem par são removidas.
+    /// </summary>
+    private static void WriteWithBold(XElement node, XElement run, string text)
+    {
+        var rPr = run.Element(W + "rPr");
+        // O que vinha depois deste texto no run vai para o último run criado.
+        var rest = node.NodesAfterSelf().ToList();
+        foreach (var n in rest) n.Remove();
+        var parts = text.Split(Negrito.Marca);
+        var currentRun = run;
+        XElement? last = null;
+        for (var k = 0; k < parts.Length; k++)
+        {
+            var bold = k % 2 == 1 && k < parts.Length - (parts.Length % 2 == 0 ? 1 : 0);
+            if (bold)
             {
-                var separator = new XElement(W + (parts[j] == "\t" ? "tab" : "br"));
-                after.AddAfterSelf(separator);
-                var nextText = new XElement(W + "t", new XAttribute(XmlNs + "space", "preserve"), parts[j + 1]);
-                separator.AddAfterSelf(nextText);
-                after = nextText;
+                if (parts[k].Length == 0) continue;
+                var boldRun = new XElement(W + "r", BoldRunProperties(rPr));
+                currentRun.AddAfterSelf(boldRun);
+                var t = new XElement(W + "t");
+                boldRun.Add(t);
+                WriteText(t, parts[k]);
+                var continuation = new XElement(W + "r", rPr == null ? null : new XElement(rPr));
+                boldRun.AddAfterSelf(continuation);
+                currentRun = continuation;
+                last = null;
+            }
+            else
+            {
+                if (last == null && currentRun == run) last = WriteText(node, parts[k]);
+                else
+                {
+                    var t = new XElement(W + "t");
+                    if (last == null) currentRun.Add(t); else last.AddAfterSelf(t);
+                    last = WriteText(t, parts[k]);
+                }
             }
         }
+        currentRun.Add(rest);
+    }
+
+    /// <summary>As mesmas propriedades do run, com negrito (w:b e w:bCs depois de rStyle/rFonts, na ordem do Word).</summary>
+    internal static XElement BoldRunProperties(XElement? rPr)
+    {
+        var bold = rPr == null ? new XElement(W + "rPr") : new XElement(rPr);
+        // Tira negrito já existente (ex.: <w:b w:val="0"/>) para não haver dois.
+        bold.Elements().Where(e => e.Name == W + "b" || e.Name == W + "bCs").Remove();
+        var anchor = bold.Elements().LastOrDefault(e => e.Name == W + "rStyle" || e.Name == W + "rFonts");
+        var marks = new object[] { new XElement(W + "b"), new XElement(W + "bCs") };
+        if (anchor != null) anchor.AddAfterSelf(marks); else bold.AddFirst(marks);
+        return bold;
     }
 
     [GeneratedRegex(@"(\r\n|\r|\n|\t)")]

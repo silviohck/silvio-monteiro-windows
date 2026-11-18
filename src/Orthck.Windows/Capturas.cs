@@ -48,6 +48,7 @@ public static class Capturas
         Docx(Path.Combine(modelos, "CAMPINA GRANDE", "Receitas", "Receita simples.docx"), "Paciente: {{NOME}}. {{PRESCRICAO}}");
         Docx(Path.Combine(modelos, "ALAGOA GRANDE", "Atestados", "Atestado.docx"), "Atesto que {{NOME_PACIENTE}} esteve aqui em {{DATA}}.");
         Docx(Path.Combine(modelos, "1 - APAC", "Fisioterapia", "APAC fisioterapia.docx"), "{{NOME_PACIENTE}} {{CPF}} {{CID}} {{JUSTIFICATIVA}}");
+        Docx(Path.Combine(modelos, "ARARUNA", "Receitas", "Receita.docx"), "Paciente: {{NOME}}. {{PRESCRICAO}}");
         arm.DefinirPastaSincronizada(modelos);
         await arm.SincronizarAsync();
         var campina = arm.Dados.Locais.First(l => l.Nome == "CAMPINA GRANDE");
@@ -140,6 +141,25 @@ public static class Capturas
         await Dialogo(() => new GerenciarTiposJanela(arm, campina.Id), "15-gerenciar-tipos");
         await Dialogo(() => new AjustesSincronizacaoJanela(janela), "16-pasta-sincronizada");
         await Dialogo(() => new AjustesJanela(janela), "17-ajustes");
+        await Dialogo(() => new ConectarGoogleJanela(arm), "22-conectar-google-drive");
+        await Dialogo(() => new ImportarDadosJanela("dados.json"), "23-importar-dados");
+
+        // Prontuário: ficha de Araruna com um modelo de atendimento aplicado e a de Alagoa Grande (texto livre).
+        var ararunaDemo = arm.Dados.Locais.First(l => l.Nome == "ARARUNA");
+        Ajustes.Atual.LocalSelecionado = ararunaDemo.Id.ToString();
+        Ajustes.Atual.FichaSelecionada = "";
+        await Tela(Secao.Prontuario, "24-prontuario-vazio");
+        var prontuario = (ProntuarioView)((System.Windows.Controls.ContentControl)((System.Windows.Controls.Grid)janela.Content).Children[1]).Content;
+        prontuario.Demonstrar("Ana Exemplo da Silva", "gonartrose");
+        await Foto("25-prontuario-araruna");
+        Ajustes.Atual.LocalSelecionado = arm.Dados.Locais.First(l => l.Nome == "ALAGOA GRANDE").Id.ToString();
+        Ajustes.Atual.FichaSelecionada = "";
+        janela.Recarregar();
+        janela.Mostrar(Secao.Prontuario);
+        prontuario = (ProntuarioView)((System.Windows.Controls.ContentControl)((System.Windows.Controls.Grid)janela.Content).Children[1]).Content;
+        prontuario.Demonstrar("Bruno Fictício Souza", "lombalgia");
+        await Foto("26-prontuario-alagoa-grande");
+        Ajustes.Atual.LocalSelecionado = campina.Id.ToString();
 
         Tema.Aplicar(app, TamanhoTexto.Normal, Aparencia.Escura);
         await Tela(Secao.Gerar, "18-gerar-escuro");

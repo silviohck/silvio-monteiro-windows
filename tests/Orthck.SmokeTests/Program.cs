@@ -311,6 +311,162 @@ try
     Assert(TabelaDeCodigos.Cid10.Buscar("colera", null).First().Descricao == "Cólera" && TabelaDeCodigos.Cid10.Grupos.Count == 22, "CID: sem acentos e 22 capítulos");
     Assert(TabelaDeCodigos.Sigtap.Buscar("0301010072", null).First().Codigo == "03.01.01.007-2" && TabelaDeCodigos.FormatarSigtap("0301") == "03.01", "SIGTAP: formato do código");
 
+    // ===== Paridade com o Mac (novembro): Prontuário, negrito, lacunas, juntar dados =====
+    // Lacunas ___ não preenchidas (mesmos casos dos testes do Mac).
+    Assert(Lacunas.Remover("DOR NO JOELHO DIREITO HÁ 6 MESES.") == "DOR NO JOELHO DIREITO HÁ 6 MESES."
+        && Lacunas.Remover("Q.P.: DOR NO JOELHO DIREITO HÁ ___.") == "Q.P.: DOR NO JOELHO DIREITO."
+        && Lacunas.Remover("DOR MECÂNICA EM JOELHO DIREITO HÁ ___, PIORA EM ESCADAS E AO LEVANTAR.") == "DOR MECÂNICA EM JOELHO DIREITO, PIORA EM ESCADAS E AO LEVANTAR.",
+        "lacunas: texto sem lacuna não muda e a palavra de ligação sai junto");
+    Assert(Lacunas.Remover("EXAME FÍSICO: MARCHA ___. CREPITAÇÃO PRESENTE. DERRAME ___. ADM 0° A 110°.") == "EXAME FÍSICO: CREPITAÇÃO PRESENTE. ADM 0° A 110°."
+        && Lacunas.Remover("FISIOTERAPIA MOTORA 10 SESSÕES. RETORNO EM ___.") == "FISIOTERAPIA MOTORA 10 SESSÕES.",
+        "lacunas: campo vazio curto sai inteiro");
+    Assert(Lacunas.Remover("DOR NO OMBRO HÁ 3 MESES. TRAUMA: ___.\nFORÇA: ___. JOBE POSITIVO.") == "DOR NO OMBRO HÁ 3 MESES.\nJOBE POSITIVO."
+        && Lacunas.Remover("FISIOTERAPIA MOTORA (FORTALECIMENTO DE QUADRÍCEPS, ALONGAMENTO) ___ SESSÕES. RETORNO EM ___.") == "FISIOTERAPIA MOTORA (FORTALECIMENTO DE QUADRÍCEPS, ALONGAMENTO) SESSÕES."
+        && Lacunas.Remover("EXAMES COMPLEMENTARES: RX COM CARGA:\nKELLGREN-LAWRENCE ___.") == "EXAMES COMPLEMENTARES:\n"
+        && Lacunas.Remover("FISIOTERAPIA MOTORA (FORTALECIMENTO DE QUADRÍCEPS) ___ SESSÕES. AVALIAR INFILTRAÇÃO.") == "FISIOTERAPIA MOTORA (FORTALECIMENTO DE QUADRÍCEPS) SESSÕES. AVALIAR INFILTRAÇÃO.",
+        "lacunas: mantém as linhas, parênteses e títulos de seção");
+
+    // Negrito: **trecho** sai em negrito no Word, com a formatação do run.
+    var modeloNegrito = CriarDocx(Path.Combine(raiz, "negrito.docx"),
+        "<w:p><w:r><w:rPr><w:rFonts w:ascii=\"Times New Roman\"/><w:b w:val=\"0\"/><w:sz w:val=\"19\"/></w:rPr><w:t>{{HDA}}</w:t></w:r></w:p>");
+    var comNegrito = Path.Combine(raiz, "com-negrito.docx");
+    DocxTemplate.Fill(modeloNegrito, comNegrito, new Dictionary<string, string> { ["HDA"] = "DOR **INTENSA** À NOITE **SEM PAR" });
+    using (var z = ZipFile.OpenRead(comNegrito))
+    {
+        var x = XDocument.Load(z.GetEntry("word/document.xml")!.Open());
+        var runs = x.Descendants(w + "r").ToList();
+        var negritos = runs.Where(r => r.Element(w + "rPr")?.Element(w + "b") is { } bb && bb.Attribute(w + "val") == null).ToList();
+        Assert(TextoDo(comNegrito) == "DOR INTENSA À NOITE SEM PAR" && negritos.Count == 1 && string.Concat(negritos[0].Descendants(w + "t").Select(t => t.Value)) == "INTENSA"
+            && negritos[0].Element(w + "rPr")!.Element(w + "rFonts") != null && negritos[0].Element(w + "rPr")!.Elements(w + "b").Count() == 1 && runs.Count == 3,
+            "negrito: trecho entre ** num run em negrito com a mesma fonte; marca sem par removida");
+    }
+    Assert(Negrito.Alternar("DOR INTENSA", 4, 7) == ("DOR **INTENSA**", 6, 7) && Negrito.Alternar("DOR **INTENSA**", 6, 7) == ("DOR INTENSA", 4, 7)
+        && Negrito.Alternar("DOR **INTENSA**", 4, 11) == ("DOR INTENSA", 4, 7) && Negrito.Alternar("AB", 1, 0) == ("A****B", 3, 0),
+        "Ctrl+B põe e tira o negrito do trecho selecionado");
+    Assert(Negrito.Balancear(["DOR **MUITO", "INTENSA** À NOITE", ""]).SequenceEqual(["DOR **MUITO**", "**INTENSA** À NOITE", ""]),
+        "negrito que passa de uma linha para a outra é fechado e reaberto");
+
+    // Modelos de atendimento (os 1.050 do Mac) e o lado.
+    Assert(ModelosDeAtendimento.Prontos.Count == 1050 && ModelosDeAtendimento.Buscar("gonartrose", []).Count > 0
+        && ModelosDeAtendimento.Buscar("M54.5", []).First().Cid == "M54.5" && ModelosDeAtendimento.Buscar("m545", []).First().Cid == "M54.5",
+        "modelos de atendimento embutidos e busca por doença ou CID");
+    Assert(ModelosDeAtendimento.ComLado("DOR NO JOELHO [LADO]", "DIREITO") == "DOR NO JOELHO DIREITO"
+        && ModelosDeAtendimento.ComLado("DOR NA MÃO [LADO]", "ESQUERDO") == "DOR NA MÃO ESQUERDA"
+        && ModelosDeAtendimento.ComLado("GONARTROSE À [LADO]", "DIREITO") == "GONARTROSE À DIREITA"
+        && ModelosDeAtendimento.ComLado("GONARTROSE À [LADO]", "BILATERAL") == "GONARTROSE BILATERAL"
+        && ModelosDeAtendimento.ComLado("LASÈGUE POSITIVO À [LADO]", "BILATERAL") == "LASÈGUE POSITIVO BILATERALMENTE"
+        && ModelosDeAtendimento.ComLado("DOR LOMBAR [LADO]", "DIREITO") == "DOR LOMBAR À DIREITA",
+        "lado concorda com a parte do corpo (DIREITO/DIREITA/À DIREITA/BILATERALMENTE)");
+    Assert(Prontuario.TrocarLado("DOR NO JOELHO DIREITO. GONARTROSE À DIREITA.", "DIREITO", "ESQUERDO") == "DOR NO JOELHO ESQUERDO. GONARTROSE À ESQUERDA.",
+        "trocar o lado troca no texto já escrito");
+
+    // Fichas prontas (Araruna e Alagoa Grande), ligadas ao local pelo nome.
+    var pront = new Armazenamento(Path.Combine(raiz, "prontuario"));
+    var araruna = pront.NovoLocal(); araruna.Nome = "CER II Araruna"; pront.Salvar();
+    pront.InstalarFichasProntas();
+    var fichaAraruna = pront.Dados.Fichas.Single(f => f.Arquivo == "ficha-araruna-cer2-v4.docx");
+    var fichaAlagoa = pront.Dados.Fichas.Single(f => f.Arquivo == "ficha-alagoa-grande-v2.docx");
+    Assert(fichaAraruna.LocalId == araruna.Id && fichaAlagoa.LocalId == null && File.Exists(pront.UrlDoModelo(fichaAraruna))
+        && fichaAraruna.Campos.Contains("HDA_LINHA_10") && Prontuario.Continuacoes("HDA", fichaAraruna).Count == 9
+        && Prontuario.CamposClinicos(fichaAraruna).Contains("HDA") && !Prontuario.CamposClinicos(fichaAraruna).Contains("HDA_LINHA_2")
+        && Prontuario.CamposDeIdentificacao(fichaAraruna).Contains("CNS") && !Prontuario.CamposDeIdentificacao(fichaAraruna).Contains("NOME")
+        && Prontuario.CampoLivre(fichaAlagoa) == "ATENDIMENTO" && pront.FichasPara(araruna).Count == 2 && pront.FichasPara(null).Count == 1,
+        "fichas prontas instaladas, ligadas ao local e com as linhas da ficha");
+    // Linhas da ficha: o que não cabe desce; Enter quebra a linha no cursor.
+    var linhasHda = Prontuario.Grupo("HDA", fichaAraruna);
+    var valoresPront = new Dictionary<string, string> { ["HDA"] = string.Join(" ", Enumerable.Repeat("PALAVRA", 20)) };
+    Assert(Prontuario.Fluir(valoresPront, linhasHda, 0) && valoresPront["HDA"].Length <= Prontuario.CaracteresPorLinha && valoresPront["HDA_LINHA_2"].Length > 0
+        && string.Join(" ", linhasHda.Select(c => valoresPront.GetValueOrDefault(c, "")).Where(t => t.Length > 0)).Split(' ').Length == 20,
+        "linha da ficha: o que não cabe desce para a linha de baixo sem cortar palavras");
+    valoresPront = new() { ["HDA"] = "PRIMEIRA SEGUNDA", ["HDA_LINHA_2"] = "TERCEIRA" };
+    Prontuario.QuebrarLinha(valoresPront, linhasHda, 0, "PRIMEIRA".Length);
+    Assert(valoresPront["HDA"] == "PRIMEIRA" && valoresPront["HDA_LINHA_2"] == "SEGUNDA" && valoresPront["HDA_LINHA_3"] == "TERCEIRA",
+        "Enter numa linha da ficha: o resto desce e as linhas seguintes descem junto");
+    // Modelo de atendimento aplicado na ficha de Araruna e na de texto livre.
+    var gonartrose = ModelosDeAtendimento.Buscar("gonartrose", []).First(m => !m.Generico);
+    var valoresAraruna = new Dictionary<string, string>();
+    Prontuario.Aplicar(valoresAraruna, gonartrose, fichaAraruna, "DIREITO");
+    Assert(valoresAraruna["CID"] == gonartrose.Cid && valoresAraruna["QUEIXA_PRINCIPAL"].Length > 0 && valoresAraruna["HDA"].Length > 0
+        && !valoresAraruna.Values.Any(v => v.Contains("[LADO]")) && valoresAraruna["PERFIL_CER_II"] == "FÍSICO"
+        && Prontuario.Grupo("HDA", fichaAraruna).All(c => valoresAraruna.GetValueOrDefault(c, "").Length <= Prontuario.CaracteresPorLinha),
+        "modelo de atendimento preenche Q.P., H.D.A., exame, CID e programação nas linhas da ficha");
+    var valoresAlagoa = new Dictionary<string, string>();
+    Prontuario.Aplicar(valoresAlagoa, gonartrose, fichaAlagoa, "ESQUERDO");
+    Assert(valoresAlagoa["ATENDIMENTO"].StartsWith("Q.P.: ") && valoresAlagoa.Values.Any(v => v.StartsWith("DIAGNÓSTICO: ")) && valoresAlagoa.Values.Any(v => v.Contains("ESQUERD")),
+        "ficha de texto livre: cada parte do modelo começa numa linha nova");
+    // Gerar o prontuário: sem os ___, com o nome digitado, e só a identificação vai para o cadastro.
+    var finais = Prontuario.ValoresFinais(valoresAraruna, fichaAraruna, "PACIENTE TESTE", "", tirarLacunas: true);
+    var prontuarioGerado = Path.Combine(raiz, "prontuario-gerado.docx");
+    DocxTemplate.Fill(pront.UrlDoModelo(fichaAraruna), prontuarioGerado, finais);
+    // (a linha da assinatura, "_____…", é da própria ficha e fica)
+    Assert(TextoDo(prontuarioGerado).Contains("PACIENTE TESTE") && !TextoDo(prontuarioGerado).Replace(new string('_', 45), "").Contains("___") && !TextoDo(prontuarioGerado).Contains("{{")
+        && TextoDo(prontuarioGerado).Contains(gonartrose.Cid), "prontuário gerado sem ___ e sem campos pendentes");
+    var pacienteFicha = new Paciente { Nome = "PACIENTE TESTE" };
+    CamposAutomaticos.Guardar(new Dictionary<string, string> { ["CNS"] = "700000000000000", ["BAIRRO"] = "CENTRO", ["HDA"] = "DOR", ["CID"] = "M17.1" }, fichaAraruna.Campos, pacienteFicha);
+    Assert(pacienteFicha.Cns == "700000000000000" && pacienteFicha.Bairro == "CENTRO" && !JsonSerializer.Serialize(pacienteFicha).Contains("M17.1"),
+        "identificação completada no prontuário vai para o cadastro; anamnese e CID não");
+    Assert(CamposAutomaticos.Valor("CIDADE", new Paciente { Cidade = "ARARUNA" }, new LocalAtendimento { Cidade = "Campina Grande" }) == "Campina Grande"
+        && CamposAutomaticos.Valor("CIDADE_PACIENTE", new Paciente { Cidade = "ARARUNA" }, null) == "ARARUNA",
+        "{{CIDADE}} continua sendo a do local; a do paciente é {{CIDADE_PACIENTE}}");
+    // Meus modelos e favoritos de atendimento por local.
+    var meu = Prontuario.ComoMeuModelo(new Dictionary<string, string> { ["QUEIXA_PRINCIPAL"] = "DOR NO JOELHO DIREITO", ["CID"] = "M17.1" }, fichaAraruna, "Meu joelho", "DIREITO");
+    pront.SalvarModeloDeAtendimento(meu);
+    pront.AlternarFavoritoDeAtendimento(meu, araruna);
+    pront.AlternarFavoritoDeAtendimento(gonartrose, araruna);
+    pront.MoverFavoritoDeAtendimento(gonartrose, meu, araruna);
+    Assert(meu.Qp == "DOR NO JOELHO [LADO]" && ModelosDeAtendimento.Buscar("meu joelho", pront.Dados.ModelosDeAtendimento).First().Meu
+        && pront.FavoritosDeAtendimento(araruna).Select(m => m.Nome).SequenceEqual([gonartrose.Nome, "Meu joelho"]) && pront.FavoritosDeAtendimento(null).Count == 0,
+        "meus modelos (o lado volta a ser [LADO]) e favoritos de atendimento por local");
+    pront.ApagarModeloDeAtendimento(meu);
+    Assert(pront.FavoritosDeAtendimento(araruna).Count == 1 && File.ReadAllText(pront.ArquivoDados).Contains("favoritosDeAtendimento"),
+        "apagar meu modelo tira dos favoritos; favoritos gravados no dados.json");
+
+    // Importar dados: juntar acrescenta sem trocar os objetos abertos nas telas; substituir troca tudo.
+    var destinoJuntar = new Armazenamento(Path.Combine(raiz, "juntar"));
+    var aqui = destinoJuntar.NovoPaciente("ANA DAQUI");
+    var outroComputador = new Armazenamento(Path.Combine(raiz, "outro-computador"));
+    var deLa = outroComputador.NovoPaciente("BIA DE LA");
+    var localDeLa = outroComputador.NovoLocal(); localDeLa.Nome = "Alagoa Grande"; deLa.LocalId = localDeLa.Id; outroComputador.Salvar();
+    outroComputador.Registrar(new DocumentoGerado { Modelo = "Receita", Paciente = deLa.Nome, PacienteId = deLa.Id, Local = "Alagoa Grande", Caminho = "/Users/x/receita.docx" });
+    outroComputador.Dados.FavoritosPorLocal[Armazenamento.ChaveDosFavoritos(localDeLa.Id)] = ["Receita"];
+    outroComputador.AdicionarAFila(outroComputador.Dados.Historico[0], 1);
+    var resumoJuntar = destinoJuntar.ImportarDados(outroComputador.ArquivoDados, Armazenamento.ModoDeImportacao.Juntar, deOutroComputador: true);
+    Assert(destinoJuntar.Dados.Pacientes.Contains(aqui) && destinoJuntar.Dados.Pacientes.Any(p => p.Id == deLa.Id && p.LocalId == localDeLa.Id)
+        && destinoJuntar.Dados.Historico.Count == 1 && destinoJuntar.Dados.FilaImpressao.Count == 0
+        && destinoJuntar.Dados.FavoritosPorLocal[Armazenamento.ChaveDosFavoritos(localDeLa.Id)].SequenceEqual(["Receita"]) && resumoJuntar.Contains("1 paciente"),
+        "juntar (Google Drive): entram pacientes, locais, histórico e favoritos; a fila é de cada computador");
+    var depois = File.ReadAllText(destinoJuntar.ArquivoDados);
+    destinoJuntar.ImportarDados(outroComputador.ArquivoDados, Armazenamento.ModoDeImportacao.Juntar, deOutroComputador: true);
+    Assert(destinoJuntar.Dados.Pacientes.Count == 2 && File.ReadAllText(destinoJuntar.ArquivoDados) == depois, "juntar de novo não duplica nada");
+    destinoJuntar.ImportarDados(outroComputador.ArquivoDados, Armazenamento.ModoDeImportacao.Juntar);
+    Assert(destinoJuntar.Dados.FilaImpressao.Count == 1 && Directory.GetFiles(destinoJuntar.PastaBackups, "antes-de-importar-*.json").Length == 1,
+        "juntar um backup à mão traz a fila pendente e guarda os dados de antes em Backups");
+    try { destinoJuntar.ImportarDados(Path.Combine(raiz, "nao-existe.json"), Armazenamento.ModoDeImportacao.Substituir); Assert(false, "substituir com arquivo ausente"); }
+    catch (FileNotFoundException) { Assert(destinoJuntar.Dados.Pacientes.Count == 2, "substituir com arquivo ausente não altera nada"); }
+
+    // Cadastro ampliado: lê o dados.json antigo (sem as chaves novas) e grava todas as chaves (o Mac exige).
+    File.WriteAllText(Path.Combine(raiz, "antigo.json"), """{"pacientes":[{"id":"E621E1F8-C36C-495A-93FC-0C247A3E6E5F","nome":"Antiga","cpf":"","rg":"","dataNascimento":"","telefone":"","email":"","endereco":"","convenio":"","observacoes":""}]}""");
+    var dadosAntigos = new Armazenamento(Path.Combine(raiz, "antigo"));
+    dadosAntigos.ImportarDados(Path.Combine(raiz, "antigo.json"), Armazenamento.ModoDeImportacao.Substituir);
+    var gravado = File.ReadAllText(dadosAntigos.ArquivoDados);
+    Assert(dadosAntigos.Dados.Pacientes.Single().Cns == "" && gravado.Contains("\"cns\"") && gravado.Contains("\"bairro\"") && gravado.Contains("\"fichas\"") && gravado.Contains("\"modelosDeAtendimento\""),
+        "cadastro ampliado (CNS, bairro…) compatível com o dados.json antigo e com o do Mac");
+
+    // Fila: "Limpar fila" e atendidos recentemente com "Limpar" e "Tirar desta lista".
+    outroComputador.LimparFila();
+    Assert(outroComputador.Dados.FilaImpressao.Count == 0 && outroComputador.Dados.Historico.Count == 1, "Limpar fila tira todos os itens e mantém o Histórico");
+    var hist = outroComputador.Dados.Historico[0];
+    Assert(outroComputador.PacientesRecentes(null, null, 12).Count == 1
+        && outroComputador.PacientesRecentes(null, null, 12, hist.Data.AddSeconds(1)).Count == 0
+        && outroComputador.PacientesRecentes(null, null, 12, null, new Dictionary<Guid, DateTimeOffset> { [deLa.Id] = hist.Data }).Count == 0
+        && outroComputador.PacientesRecentes(null, null, 12, null, new Dictionary<Guid, DateTimeOffset> { [deLa.Id] = hist.Data.AddSeconds(-1) }).Count == 1,
+        "atendidos recentemente: limpar a lista e tirar um paciente (volta com documento novo)");
+    // Google Drive: credencial lida do arquivo client_secret….json.
+    File.WriteAllText(Path.Combine(raiz, "client_secret.json"), """{"installed":{"client_id":"id-de-teste.apps.googleusercontent.com","client_secret":"segredo-de-teste"}}""");
+    Assert(GoogleDrive.LerCredencial(Path.Combine(raiz, "client_secret.json")) == ("id-de-teste.apps.googleusercontent.com", "segredo-de-teste")
+        && !new GoogleDrive(Path.Combine(raiz, "prontuario")).Conectado && !pront.GoogleConectado && !pront.EnvioPendente,
+        "Google Drive: credencial do arquivo e nada conectado nem enviado sem autorização");
+
     Console.WriteLine(falhas == 0 ? "Todos os testes passaram." : $"{falhas} teste(s) falharam.");
 }
 finally { try { Directory.Delete(raiz, recursive: true); } catch { } }

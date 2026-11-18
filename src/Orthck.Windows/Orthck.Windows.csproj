@@ -18,5 +18,10 @@
     <Resource Include="Recursos\Orthck.png" />
     <!-- O WPF não importa System.IO por padrão (por causa de System.Windows.Shapes.Path, que não é usado aqui). -->
     <Using Include="System.IO" />
+    <!-- Credencial do Google (cliente "App para computador") vinda dos Secrets do GitHub (GOOGLE_CLIENT_ID e
+         GOOGLE_CLIENT_SECRET, como no Mac): com ela, conectar ao Google Drive pede só o login no navegador.
+         Sem as variáveis, o app pede o arquivo da credencial. -->
+    <AssemblyMetadata Include="GoogleClientID" Value="$(GOOGLE_CLIENT_ID)" />
+    <AssemblyMetadata Include="GoogleClientSecret" Value="$(GOOGLE_CLIENT_SECRET)" />
   </ItemGroup>
 </Project>
