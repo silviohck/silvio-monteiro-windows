@@ -45,10 +45,18 @@ public sealed class GerarView : UserControl
     /// <summary>Nome e campos em maiúsculas, como no Mac ("CAPS LOCK ativo").</summary>
     public static string Maiusculas(string texto) => texto.ToUpper(PtBr);
 
+    private Button? _botaoGerar;
+
     public GerarView(JanelaPrincipal janela)
     {
         _janela = janela;
         Content = _raiz;
+        PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key != Key.Enter || Keyboard.Modifiers != ModifierKeys.Control) return;
+            e.Handled = true;
+            if (_botaoGerar is { IsEnabled: true }) Ui.ExecutarAsync(Gerar);
+        };
         _nome.TextChanged += (_, _) =>
         {
             // Sempre em maiúsculas (digitado, colado ou vindo do cadastro).
@@ -695,6 +703,7 @@ public sealed class GerarView : UserControl
 
     private void AtualizarSecaoSalvar()
     {
+        _botaoGerar = null;
         if (Modelo is not { } modelo) { _secaoSalvar.Content = null; return; }
         var corpo = Ui.Coluna(12);
 
@@ -727,12 +736,13 @@ public sealed class GerarView : UserControl
         }
         // O botão lê o modelo escolhido na hora do clique (nunca um modelo guardado de antes).
         var gerar = Ui.Botao("Gerar documento", () => Ui.ExecutarAsync(Gerar), principal: true, glifo: Ui.GSalvar);
-        gerar.IsDefault = true;
+        // Só Ctrl+Enter gera: Enter sozinho (ao terminar de digitar o nome) gerava sem querer.
+        _botaoGerar = gerar;
         gerar.Padding = new Thickness(18, 9, 18, 9);
         gerar.IsEnabled = !_geracaoConcluida && !PrecisaEscolherPaciente && !(NomeDigitado.Length == 0 && modelo.Campos.Any(CamposAutomaticos.EhNomeDoPaciente));
         gerar.ToolTip = _geracaoConcluida ? "Este documento já foi gerado. Altere os dados, escolha outro modelo ou clique em Próximo paciente."
             : PrecisaEscolherPaciente ? "Escolha qual dos pacientes com este nome é o certo"
-            : NomeDigitado.Length == 0 ? "Digite o nome do paciente" : "Gerar o documento (Enter)";
+            : NomeDigitado.Length == 0 ? "Digite o nome do paciente" : "Gerar o documento (Ctrl+Enter)";
         ToolTipService.SetShowOnDisabled(gerar, true);
         var proximo = BotaoProximo();
         proximo.Padding = new Thickness(16, 9, 16, 9);
