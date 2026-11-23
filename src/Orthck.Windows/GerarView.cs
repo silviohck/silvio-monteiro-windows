@@ -735,7 +735,9 @@ public sealed class GerarView : UserControl
             }
         }
         // O botão lê o modelo escolhido na hora do clique (nunca um modelo guardado de antes).
-        var gerar = Ui.Botao("Gerar documento", () => Ui.ExecutarAsync(Gerar), principal: true, glifo: Ui.GSalvar);
+        // O nome no botão é o do modelo que vai sair; se na hora do clique o modelo for outro, não gera.
+        var esperado = modelo.Id;
+        var gerar = Ui.Botao($"Gerar “{modelo.Nome}”", () => Ui.ExecutarAsync(() => Gerar(esperado)), principal: true, glifo: Ui.GSalvar);
         // Só Ctrl+Enter gera: Enter sozinho (ao terminar de digitar o nome) gerava sem querer.
         _botaoGerar = gerar;
         gerar.Padding = new Thickness(18, 9, 18, 9);
@@ -786,9 +788,16 @@ public sealed class GerarView : UserControl
 
     // MARK: Gerar e imprimir
 
-    private async Task Gerar()
+    private async Task Gerar() => await Gerar(null);
+
+    private async Task Gerar(Guid? esperado)
     {
         if (_geracaoConcluida || PrecisaEscolherPaciente) return;
+        if (esperado is { } id && Modelo?.Id != id)
+        {
+            Ui.Erro($"O modelo escolhido mudou para “{Modelo?.Nome}”. Confira o Modelo e clique em Gerar de novo.");
+            return;
+        }
         // Sempre o modelo que está na tela agora, e só se for da subpasta e do local escolhidos.
         if (Modelo is not { } modelo || modelo.Categoria != _subpasta || !Arm.ModelosPara(Local).Any(m => m.Id == modelo.Id))
         {

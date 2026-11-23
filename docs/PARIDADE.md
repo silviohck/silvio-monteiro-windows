@@ -16,7 +16,7 @@ Atualizada em 18/11/2026 (todas as alterações do Mac até 17/11/2026: Prontuá
 | Modelos .doc/.rtf/.odt | Convertidos pelo Word (COM) | Testar no Windows real |
 | Tipos por local (criar, renomear, excluir, ordem alfabética) | Igual | — |
 | Atendidos recentemente: do atendimento mais recente para o mais antigo | Igual | — |
-| Gerar documento: quadro do local, documento pronto, subpasta em níveis, abrir ao gerar, nome copiado; trocar de subpasta não escolhe sozinho o primeiro modelo (fica "Escolha…", exceto com modelo único); gera com Ctrl+Enter (⌘↩ no Mac), não com Enter sozinho | Igual | — |
+| Gerar documento: quadro do local, documento pronto, subpasta em níveis, abrir ao gerar, nome copiado; trocar de subpasta não escolhe sozinho o primeiro modelo (fica "Escolha…", exceto com modelo único); gera com Ctrl+Enter (⌘↩ no Mac), não com Enter sozinho; o botão mostra o modelo (Gerar “nome”) e não gera se o modelo mudou | Igual | — |
 | Documentos não ficam guardados: pasta temporária do app (Documentos gerados), apagados após 12 h, menos os da fila; "Só abrir" | Igual (06/11/2026) | — |
 | Sugestões de pacientes só do local escolhido | Igual (06/11/2026) | — |
 | Sugestões de CID só em campos de CID (não em {{CIDADE}}) | Igual (06/11/2026) | — |
