@@ -917,10 +917,9 @@ public sealed class GerarView : UserControl
         if (_filtroDia != null && !dias.Any(d => d.Item2 == _filtroDia)) _filtroDia = null;
         p.Add(Ui.Escolha(dias, _filtroDia, v => { _filtroDia = v; AtualizarPainel(); }, 160));
 
-        // Os mais recentes entram na lista (até 12; num dia escolhido, todos); na tela, em ordem alfabética.
+        // Os mais recentes (até 12; num dia escolhido, todos), do atendimento mais recente para o mais antigo.
         var recentes = Arm.PacientesRecentes(filtroLocal.Length == 0 ? null : filtroLocal, _filtroDia, _filtroDia == null ? 12 : int.MaxValue,
-                Ajustes.Atual.RecentesLimposEm, Ajustes.Atual.RecentesOcultos)
-            .OrderBy(r => r.Paciente.Nome, Texto.Ordem).ToList();
+                Ajustes.Atual.RecentesLimposEm, Ajustes.Atual.RecentesOcultos);
         if (recentes.Count == 0)
             p.Add(Ui.Texto(filtroLocal.Length == 0 && _filtroDia == null ? "Os pacientes aparecem aqui depois do primeiro documento gerado." : "Nenhum paciente com esse filtro.", Estilo.Apoio));
         foreach (var (paciente, ultimo) in recentes) p.Add(LinhaDoRecente(paciente, ultimo));

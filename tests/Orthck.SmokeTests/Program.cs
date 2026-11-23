@@ -110,6 +110,13 @@ try
         && arm.PacientesRecentes("Araruna", null, 12).Count == 0 && arm.PacientesRecentes(null, DateTime.Today.AddDays(-3), 12).Count == 0
         && arm.DocumentosDe(p1).Count == 2 && arm.DiasComAtendimento.SequenceEqual([DateTime.Today]),
         "atendidos recentemente: um por paciente, filtro de local e de dia, documentos do paciente");
+    // Ordem do painel: atendimento mais recente primeiro (não alfabética).
+    var armOrdem = new Armazenamento(Path.Combine(raiz, "ordem-recentes"));
+    var zelia = armOrdem.NovoPaciente("Zélia Teste"); var abel = armOrdem.NovoPaciente("Abel Teste");
+    armOrdem.Registrar(new DocumentoGerado { Modelo = "z", Paciente = abel.Nome, PacienteId = abel.Id, Data = DateTimeOffset.Now.AddMinutes(-2) });
+    armOrdem.Registrar(new DocumentoGerado { Modelo = "z", Paciente = zelia.Nome, PacienteId = zelia.Id, Data = DateTimeOffset.Now.AddMinutes(-1) });
+    var ordem = armOrdem.PacientesRecentes(null, null, 12).Select(r => r.Paciente.Id).ToList();
+    Assert(ordem.IndexOf(zelia.Id) == 0 && ordem.IndexOf(abel.Id) == 1, "atendidos recentemente: o mais recente primeiro");
 
     // Pastas dos documentos
     arm.Dados.PastaDocumentos = Path.Combine(raiz, "Documentos"); arm.Salvar();
