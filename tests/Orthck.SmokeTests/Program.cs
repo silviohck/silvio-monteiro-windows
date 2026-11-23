@@ -467,6 +467,17 @@ try
         && !new GoogleDrive(Path.Combine(raiz, "prontuario")).Conectado && !pront.GoogleConectado && !pront.EnvioPendente,
         "Google Drive: credencial do arquivo e nada conectado nem enviado sem autorização");
 
+    // Trocar de subpasta não escolhe sozinho o primeiro modelo (saía "cibex" no lugar do escolhido).
+    {
+        ModeloDocumento M(string nome) => new() { Nome = nome, Arquivo = nome + ".docx", Campos = [] };
+        var cibex = M("cibex"); var pregabalina = M("pregabalina + duloxetina"); var so = M("único");
+        Assert(Armazenamento.ModeloAoTrocarSubpasta([cibex, pregabalina], null, "retorno") == null
+            && Armazenamento.ModeloAoTrocarSubpasta([cibex, pregabalina], pregabalina.Id, null) == pregabalina.Id
+            && Armazenamento.ModeloAoTrocarSubpasta([cibex, pregabalina], Guid.NewGuid(), "pregabalina + duloxetina") == pregabalina.Id
+            && Armazenamento.ModeloAoTrocarSubpasta([so], null, null) == so.Id,
+            "trocar subpasta: com vários modelos fica \"Escolha…\"; mantém o mesmo nome; modelo único já vem escolhido");
+    }
+
     Console.WriteLine(falhas == 0 ? "Todos os testes passaram." : $"{falhas} teste(s) falharam.");
 }
 finally { try { Directory.Delete(raiz, recursive: true); } catch { } }

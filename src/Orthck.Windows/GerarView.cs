@@ -224,9 +224,8 @@ public sealed class GerarView : UserControl
         var modelos = ModelosDaSubpasta;
         if (!modelos.Any(m => m.Id == _modeloId))
         {
-            // Ao trocar de local, fica com o modelo de mesmo nome deste local, se houver.
-            var mesmoNome = Modelo is { } anterior ? modelos.FirstOrDefault(m => m.Nome == anterior.Nome) : null;
-            _modeloId = (mesmoNome ?? modelos.FirstOrDefault())?.Id;
+            // Mesmo nome (troca de local) ou modelo único; com vários, fica "Escolha…" até a escolha.
+            _modeloId = Armazenamento.ModeloAoTrocarSubpasta(modelos, _modeloId, Modelo?.Nome);
             _copias = Modelo?.Copias ?? 1;
         }
     }

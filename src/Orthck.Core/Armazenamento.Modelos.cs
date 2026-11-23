@@ -13,6 +13,17 @@ public sealed partial class Armazenamento
 
     // MARK: Modelos
 
+    /// <summary>
+    /// Modelo que fica escolhido quando o atual não é da subpasta mostrada: o de mesmo nome (troca de local)
+    /// ou, se a subpasta tem um modelo só, esse. Nunca o primeiro de uma lista com vários — fica "Escolha…".
+    /// </summary>
+    public static Guid? ModeloAoTrocarSubpasta(IReadOnlyList<ModeloDocumento> modelosDaSubpasta, Guid? atual, string? nomeAnterior)
+    {
+        if (atual is { } id && modelosDaSubpasta.Any(m => m.Id == id)) return id;
+        var mesmoNome = nomeAnterior == null ? null : modelosDaSubpasta.FirstOrDefault(m => m.Nome == nomeAnterior);
+        return (mesmoNome ?? (modelosDaSubpasta.Count == 1 ? modelosDaSubpasta[0] : null))?.Id;
+    }
+
     public string UrlDoModelo(ModeloDocumento modelo) => Path.Combine(PastaModelos, modelo.Arquivo);
 
     /// <summary>Arquivo original na pasta sincronizada (para editar no Word) ou a cópia guardada pelo app.</summary>
