@@ -145,9 +145,20 @@ public sealed partial class Armazenamento
     public LocalAtendimento? LocalDoModelo(ModeloDocumento modelo) => Local(modelo.LocalId);
 
     /// <summary>Modelos que aparecem para um local: os dele e os de todos os locais, por subpasta e nome.</summary>
-    public List<ModeloDocumento> ModelosPara(LocalAtendimento? local) => Dados.Modelos
-        .Where(m => LocalDoModelo(m) is not { } dono || dono.Id == local?.Id)
-        .OrderBy(m => m.Categoria, Texto.Ordem).ThenBy(m => m.Nome, Texto.Ordem).ToList();
+    public List<ModeloDocumento> ModelosPara(LocalAtendimento? local)
+    {
+        // Guardado até a próxima gravação (ou troca dos dados): a tela Gerar pede esta lista várias vezes a cada atualização.
+        var chave = local?.Id ?? Guid.Empty;
+        if (_cacheModelos.TryGetValue(chave, out var c) && ReferenceEquals(c.Dados, Dados) && c.Modelos == Dados.Modelos.Count && c.Locais == Dados.Locais.Count)
+            return [.. c.Lista];
+        var lista = Dados.Modelos
+            .Where(m => LocalDoModelo(m) is not { } dono || dono.Id == local?.Id)
+            .OrderBy(m => m.Categoria, Texto.Ordem).ThenBy(m => m.Nome, Texto.Ordem).ToList();
+        _cacheModelos[chave] = (Dados, Dados.Modelos.Count, Dados.Locais.Count, lista);
+        return [.. lista];
+    }
+
+    private readonly Dictionary<Guid, (DadosApp Dados, int Modelos, int Locais, List<ModeloDocumento> Lista)> _cacheModelos = [];
 
     public void RemoverModelo(ModeloDocumento modelo)
     {

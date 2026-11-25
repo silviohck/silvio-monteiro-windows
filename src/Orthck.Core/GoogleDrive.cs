@@ -245,39 +245,6 @@ public sealed class GoogleDrive
         return arquivo;
     }
 
-    /// <summary>Envio "retomável" do Google, para arquivos grandes (como o .zip da pasta de modelos): cria o arquivo
-    /// (id null) ou troca o conteúdo dele.</summary>
-    public async Task<ArquivoNoDrive> EnviarArquivoGrandeAsync(string arquivoLocal, string nome, string tipo, string? id)
-    {
-        var tamanho = new FileInfo(arquivoLocal).Length;
-        var endereco = id != null
-            ? $"https://www.googleapis.com/upload/drive/v3/files/{Uri.EscapeDataString(id)}?uploadType=resumable&fields=id,modifiedTime"
-            : "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,modifiedTime";
-        using var inicio = new HttpRequestMessage(id == null ? HttpMethod.Post : HttpMethod.Patch, endereco)
-        {
-            Content = new StringContent(id == null ? JsonSerializer.Serialize(new { name = nome, mimeType = tipo }) : "{}", Encoding.UTF8, "application/json")
-        };
-        inicio.Headers.Add("X-Upload-Content-Type", tipo);
-        inicio.Headers.Add("X-Upload-Content-Length", tamanho.ToString());
-        inicio.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await TokenAsync());
-        using var respostaDoInicio = await Http.SendAsync(inicio);
-        if (respostaDoInicio.StatusCode != HttpStatusCode.OK || respostaDoInicio.Headers.Location is not { } sessao)
-        {
-            if (respostaDoInicio.StatusCode == HttpStatusCode.Unauthorized) _tokenDeAcesso = null;
-            throw Erro(await respostaDoInicio.Content.ReadAsStringAsync(), (int)respostaDoInicio.StatusCode);
-        }
-        await using var arquivo = File.OpenRead(arquivoLocal);
-        using var envio = new HttpRequestMessage(HttpMethod.Put, sessao)
-        {
-            Content = new StreamContent(arquivo) { Headers = { ContentType = new MediaTypeHeaderValue(tipo) } }
-        };
-        using var resposta = await Http.SendAsync(envio);
-        var dados = await resposta.Content.ReadAsStringAsync();
-        var status = (int)resposta.StatusCode;
-        if ((status != 200 && status != 201) || Arquivo(LerJson(dados)) is not { } enviado) throw Erro(dados, status);
-        return enviado;
-    }
-
     private async Task<(string Dados, int Status)> ChamarAsync(Func<HttpRequestMessage> criar)
     {
         using var pedido = criar();

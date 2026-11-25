@@ -155,3 +155,64 @@ public sealed class ConectarGoogleJanela : Dialogo
         }
     }
 }
+
+/// <summary>
+/// Restaurar uma cópia (RestaurarBackupView do Mac): a lista das cópias guardadas em Backups, com data, pacientes e
+/// documentos; restaurar pede confirmação e os dados de agora viram uma cópia antes (dá para desfazer).
+/// </summary>
+public sealed class RestaurarCopiaJanela : Dialogo
+{
+    private readonly JanelaPrincipal _janela;
+
+    public RestaurarCopiaJanela(JanelaPrincipal janela) : base("Restaurar uma cópia dos dados", 620, 600)
+    {
+        _janela = janela;
+        Montar();
+        var pasta = Ui.Botao("Abrir a pasta das cópias", () => Ui.AbrirPasta(_janela.Arm.PastaBackups), glifo: Ui.GPastaAberta);
+        pasta.Margin = new Thickness(0, 0, 8, 0);
+        var outro = Ui.Botao("Usar outro arquivo…", () => { if (_janela.ImportarDados()) Close(); }, glifo: Ui.GImportar,
+            dica: "Um dados.json de outro computador ou do Mac");
+        var esquerda = Ui.Linha(0, pasta, outro);
+        Rodape.Children.Add(esquerda);
+        AdicionarBotao("Fechar", Close);
+    }
+
+    private void Montar()
+    {
+        var p = Ui.Coluna(12);
+        var explicacao = Ui.Texto("O app guarda sozinho uma cópia dos pacientes, locais e histórico por dia (dos últimos 30 dias). Restaurar volta os dados para como estavam na cópia escolhida; os dados de agora viram uma cópia antes, para poder desfazer. A fila de impressão e os arquivos Word não mudam.",
+            Estilo.Normal, Tema.TextoSecundario);
+        explicacao.TextWrapping = TextWrapping.Wrap;
+        p.Add(explicacao);
+        var copias = _janela.Arm.CopiasDosDados();
+        if (copias.Count == 0) p.Add(Ui.Texto("Ainda não há cópias guardadas.", Estilo.Apoio));
+        foreach (var copia in copias)
+        {
+            var info = Ui.Coluna(2);
+            var data = Ui.Texto(copia.Data.ToString("dd 'de' MMMM 'de' yyyy, HH:mm", new System.Globalization.CultureInfo("pt-BR")));
+            data.FontWeight = FontWeights.SemiBold;
+            info.Add(data);
+            info.Add(Ui.Texto($"{Texto.Plural(copia.Pacientes, "paciente", "pacientes")} · {Texto.Plural(copia.Documentos, "documento", "documentos")}"
+                + (copia.AntesDeImportar ? " · feita antes de importar/restaurar" : ""), Estilo.Apoio));
+            var restaurar = Ui.Botao("Restaurar…", () => Restaurar(copia));
+            p.Add(Ui.Cartao(Ui.Extremos(info, restaurar), espaco: 12));
+        }
+        Corpo = Ui.Pagina(p, 580);
+    }
+
+    private void Restaurar(Armazenamento.CopiaDosDados copia)
+    {
+        var quando = copia.Data.ToString("dd/MM/yyyy HH:mm");
+        if (!Ui.Confirmar($"Voltar os dados para a cópia de {quando}?",
+            $"Ficam {Texto.Plural(copia.Pacientes, "paciente", "pacientes")} e {Texto.Plural(copia.Documentos, "documento", "documentos")} no histórico. " +
+            "O que foi feito depois dessa cópia sai do app (os dados de agora são guardados antes, como uma nova cópia).", true)) return;
+        try
+        {
+            var resumo = _janela.Arm.ImportarDados(copia.Arquivo, Armazenamento.ModoDeImportacao.Substituir);
+            _janela.Recarregar();
+            Ui.Informar(resumo);
+            Montar();
+        }
+        catch (Exception ex) { Ui.Erro(ex.Message); }
+    }
+}

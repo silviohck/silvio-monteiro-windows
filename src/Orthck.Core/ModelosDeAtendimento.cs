@@ -50,6 +50,16 @@ public static class ModelosDeAtendimento
 
     /// <summary>Busca pelo nome da doença, pelo diagnóstico ou pelo CID (com ou sem ponto). Primeiro os seus modelos,
     /// depois os escritos um a um e por último os modelos por tipo.</summary>
+    /// <summary>CID, onde procurar e nome já sem acentos; os dos modelos do app ficam prontos uma vez só.</summary>
+    private static (string Cid, string Onde, string Nome) TextoDeBusca(ModeloDeAtendimento modelo) =>
+        _textosDosProntos.Value.TryGetValue(modelo, out var pronto) ? pronto : Preparar(modelo);
+
+    private static (string Cid, string Onde, string Nome) Preparar(ModeloDeAtendimento modelo) =>
+        (Simples(modelo.Cid).Replace(".", ""), Simples(modelo.Nome + " " + modelo.Diagnostico + " " + modelo.Cid), Simples(modelo.Nome));
+
+    private static readonly Lazy<Dictionary<ModeloDeAtendimento, (string, string, string)>> _textosDosProntos =
+        new(() => Prontos.ToDictionary(m => m, Preparar, ReferenceEqualityComparer.Instance));
+
     public static List<ModeloDeAtendimento> Buscar(string termo, IEnumerable<ModeloDeAtendimento> meus, int limite = 12)
     {
         var texto = Simples(termo).Trim();
@@ -58,12 +68,11 @@ public static class ModelosDeAtendimento
         var codigo = texto.Replace(".", "");
         int? Nota(ModeloDeAtendimento modelo)
         {
-            var cid = Simples(modelo.Cid).Replace(".", "");
-            var onde = Simples(modelo.Nome + " " + modelo.Diagnostico + " " + modelo.Cid);
+            var (cid, onde, nome) = TextoDeBusca(modelo);
             int nota;
             if (cid == codigo) nota = 0;
             else if (codigo.Length > 1 && char.IsLetter(codigo[0]) && char.IsDigit(codigo[1]) && cid.StartsWith(codigo, StringComparison.Ordinal)) nota = 1;
-            else if (palavras.All(p => onde.Contains(p, StringComparison.Ordinal))) nota = Simples(modelo.Nome).StartsWith(texto, StringComparison.Ordinal) ? 2 : 3;
+            else if (palavras.All(p => onde.Contains(p, StringComparison.Ordinal))) nota = nome.StartsWith(texto, StringComparison.Ordinal) ? 2 : 3;
             else return null;
             if (modelo.Meu) nota -= 10; else if (modelo.Generico) nota += 5;
             return nota;

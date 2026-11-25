@@ -40,10 +40,10 @@ public sealed class AjustesJanela : Dialogo
         if (File.Exists(Registro.Arquivo))
             botoes.Add(Ui.Botao("Registro de erros", () => Ui.MostrarNaPasta(Registro.Arquivo), glifo: Ui.GNota,
                 dica: "Mostra o arquivo erros.log (para enviar ao suporte, se algo der errado)"));
-        botoes.Add(Ui.Botao("Restaurar um backup…", RestaurarBackup, glifo: Ui.GBackup));
+        botoes.Add(Ui.Botao("Restaurar uma cópia…", () => _janela.AbrirRestauracao(), glifo: Ui.GBackup));
         dados.Add(botoes);
         p.Add(Ui.Secao("Dados e backup", Ui.GBackup, dados,
-            "Tudo fica só neste computador: dados.json (pacientes, locais, histórico e fila), a pasta Modelos e os backups diários (os últimos 30). Guarde de vez em quando um .zip (Compactar, na barra lateral) fora do computador."));
+            "Tudo fica só neste computador: dados.json (pacientes, locais, histórico e fila), a pasta Modelos e os backups diários (os últimos 30). Para ter uma cópia fora do computador, conecte o Google Drive (barra lateral, em Backup)."));
 
         var mac = Ui.Coluna(10);
         mac.Add(Ui.Texto("Traz pacientes, locais, modelos, tipos, histórico e fila do Orthck para Mac. Copie para cá a pasta de dados do Mac inteira (~/Library/Application Support/GeradorDocumentos, com o dados.json e a pasta Modelos) e escolha o dados.json dela. Os dados atuais deste computador são guardados antes em Backups."));
@@ -56,23 +56,6 @@ public sealed class AjustesJanela : Dialogo
     {
         Ajustes.Salvar();
         Tema.Aplicar(Application.Current, Ajustes.Atual.TamanhoTexto, Ajustes.Atual.Aparencia);
-    }
-
-    private void RestaurarBackup()
-    {
-        var arm = _janela.Arm;
-        var dialogo = new Microsoft.Win32.OpenFileDialog
-        {
-            Title = "Escolha o backup para restaurar", InitialDirectory = arm.PastaBackups, Filter = "Backups do Orthck (*.json)|*.json"
-        };
-        if (dialogo.ShowDialog(this) != true) return;
-        if (!Ui.Confirmar($"Restaurar “{Path.GetFileName(dialogo.FileName)}”?",
-            "Os dados atuais serão substituídos por este backup. Uma cópia dos dados atuais fica guardada na pasta de dados. O Orthck será fechado; abra-o de novo em seguida.", true)) return;
-        Ui.Executar(() =>
-        {
-            Armazenamento.RestaurarBackup(arm.Pasta, dialogo.FileName);
-            Application.Current.Shutdown();
-        });
     }
 
     private void ImportarDoMac()

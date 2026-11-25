@@ -537,11 +537,7 @@ public sealed class GerarView : UserControl
     private List<Paciente> Sugestoes()
     {
         if (NomeDigitado.Length < 2 || Homonimos.Count > 0) return [];
-        var local = Local;
-        return Arm.PacientesOrdenados
-            .Where(p => Texto.Contem(p.Nome, NomeDigitado)
-                && (local == null || Arm.LocaisDoPaciente(p).Any(l => l.Id == local.Id)))
-            .Take(8).ToList();
+        return Arm.SugestoesDePacientes(NomeDigitado, Local, 8);
     }
 
     private void AtualizarSituacaoPaciente()
