@@ -58,7 +58,7 @@ public static class ModelosDeAtendimento
         (Simples(modelo.Cid).Replace(".", ""), Simples(modelo.Nome + " " + modelo.Diagnostico + " " + modelo.Cid), Simples(modelo.Nome));
 
     private static readonly Lazy<Dictionary<ModeloDeAtendimento, (string, string, string)>> _textosDosProntos =
-        new(() => Prontos.ToDictionary(m => m, Preparar, ReferenceEqualityComparer.Instance));
+        new(() => Prontos.ToDictionary(m => m, Preparar));
 
     public static List<ModeloDeAtendimento> Buscar(string termo, IEnumerable<ModeloDeAtendimento> meus, int limite = 12)
     {
