@@ -30,8 +30,6 @@ public sealed class Ajustes
     public string FichaSelecionada { get; set; } = "";
     public string LadoModelo { get; set; } = "DIREITO";
     public bool TirarLacunas { get; set; } = true;
-    /// <summary>Quando a pasta foi enviada ao Google Drive pela última vez.</summary>
-    public DateTimeOffset? UltimoEnvioPastaDrive { get; set; }
 
     private static string Arquivo => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Orthck", "ajustes.json");
     public static Ajustes Atual { get; private set; } = new();

@@ -210,7 +210,7 @@ public sealed class JanelaPrincipal : Window
     {
         if (_contagemFila != null) _contagemFila.Text = Arm.PendentesNaFila > 0 ? Arm.PendentesNaFila.ToString() : "";
         // Só refaz o rodapé quando algo dele mudou (não a cada tecla digitada num cadastro).
-        var chave = $"{Arm.Dados.PastaSincronizada.Length > 0}|{_compactando}|{Ajustes.Atual.Impressora}|{_impressoras?.Count}|{Arm.GoogleConectado}|{Arm.SincronizandoDrive}|{Arm.EnvioPendente}|{Arm.SituacaoNuvem}|{Arm.EnviandoPastaAoDrive}";
+        var chave = $"{Arm.Dados.PastaSincronizada.Length > 0}|{Ajustes.Atual.Impressora}|{_impressoras?.Count}|{Arm.GoogleConectado}|{Arm.SincronizandoDrive}|{Arm.EnvioPendente}|{Arm.SituacaoNuvem}";
         if (chave == _chaveDoRodape) return;
         _chaveDoRodape = chave;
         _rodapeLateral.Children.Clear();
@@ -231,34 +231,24 @@ public sealed class JanelaPrincipal : Window
         _rodapeLateral.Add(ajustes);
     }
 
-    /// <summary>Backup (como no Mac): compactar a pasta (com os dados), importar um arquivo de dados .json, enviar a pasta
-    /// ao Google Drive e a cópia automática dos dados no Google Drive.</summary>
+    /// <summary>Backup (como no Mac): restaurar uma das cópias diárias dos dados e, abaixo, a cópia no Google Drive.</summary>
     private FrameworkElement SecaoBackup()
     {
         var backup = Ui.Coluna(6);
-        backup.Add(Ui.TituloSecao("Backup", Ui.GZip));
-        Button Largo(Button b) { b.HorizontalAlignment = HorizontalAlignment.Stretch; return b; }
-        var temPasta = Arm.Dados.PastaSincronizada.Length > 0;
-        if (temPasta)
-        {
-            var compactar = Largo(Ui.Botao(_compactando ? "Compactando…" : "Compactar (.zip)…", () => Ui.ExecutarAsync(() => Compactar()), glifo: Ui.GZip,
-                dica: "Cria um .zip com todos os arquivos da pasta sincronizada e os dados do app"));
-            compactar.IsEnabled = !_compactando;
-            backup.Add(compactar);
-        }
-        backup.Add(Largo(Ui.Botao("Importar dados (.json)…", () => ImportarDados(), glifo: Ui.GImportar,
-            dica: "Traz pacientes, locais, histórico e fila de um backup (dados.json ou “Orthck - dados (backup).json”)")));
-        if (temPasta)
-        {
-            var enviar = Largo(Ui.Botao(Arm.EnviandoPastaAoDrive ? "Enviando…" : "Enviar pasta ao Drive", () => Ui.ExecutarAsync(EnviarPastaAoDrive), glifo: Ui.GEnviar,
-                dica: "Manda ao Google Drive um .zip com a pasta sincronizada inteira e os dados do app (substitui o anterior)"));
-            enviar.IsEnabled = !Arm.EnviandoPastaAoDrive;
-            backup.Add(enviar);
-            if (Ajustes.Atual.UltimoEnvioPastaDrive is { } quando)
-                backup.Add(Ui.Texto($"Pasta enviada em {quando.LocalDateTime:dd/MM/yyyy HH:mm}", Estilo.Legenda, Tema.TextoSecundario));
-        }
+        backup.Add(Ui.TituloSecao("Backup", Ui.GBackup));
+        var restaurar = Ui.Botao("Restaurar uma cópia…", AbrirRestauracao, glifo: Ui.GBackup,
+            dica: "Volta os pacientes, locais e histórico para uma das cópias diárias guardadas pelo app");
+        restaurar.HorizontalAlignment = HorizontalAlignment.Stretch;
+        backup.Add(restaurar);
+        backup.Add(Quebra(Ui.Texto("Uma cópia dos dados é guardada sozinha todo dia (últimos 30 dias).", Estilo.Legenda, Tema.TextoSecundario)));
         backup.Add(CopiaNaNuvem(), 4);
         return backup;
+    }
+
+    /// <summary>Lista das cópias para restaurar (e "Usar outro arquivo…").</summary>
+    public void AbrirRestauracao()
+    {
+        new RestaurarCopiaJanela(this) { Owner = this }.ShowDialog();
     }
 
     /// <summary>Cópia automática dos dados no Google Drive: conectar, ou a situação e o menu (sincronizar, abrir, desconectar).</summary>
@@ -309,21 +299,6 @@ public sealed class JanelaPrincipal : Window
         return Arm.GoogleConectado;
     }
 
-    private async Task EnviarPastaAoDrive()
-    {
-        if (!Arm.GoogleConectado && !ConectarGoogle()) return;
-        try
-        {
-            var bytes = await Arm.EnviarPastaAoGoogleDriveAsync();
-            Ajustes.Atual.UltimoEnvioPastaDrive = DateTimeOffset.Now;
-            Ajustes.Salvar();
-            _chaveDoRodape = null;
-            AtualizarLateral();
-            Ui.Informar($"Pasta enviada ao seu Google Drive como “{Armazenamento.NomeDoZipNoDrive}” ({bytes / 1024.0 / 1024.0:0.0} MB), com o backup dos dados. O envio anterior foi substituído.");
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { Ui.Erro(ex.Message); }
-    }
-
     private List<string>? _impressoras;
     private string? _chaveDoRodape;
     private FrameworkElement SeletorDeImpressora()
@@ -365,28 +340,6 @@ public sealed class JanelaPrincipal : Window
     public static string NomeDaImpressora => Ajustes.Atual.Impressora.Length == 0 ? "impressora padrão do Windows" : Ajustes.Atual.Impressora;
     public static string? ImpressoraEscolhida => Ajustes.Atual.Impressora.Length == 0 ? null : Ajustes.Atual.Impressora;
 
-    private bool _compactando;
-    private async Task Compactar()
-    {
-        var pasta = Arm.Dados.PastaSincronizada;
-        var dialogo = new Microsoft.Win32.SaveFileDialog
-        {
-            Title = "Onde salvar o .zip com todos os arquivos da pasta sincronizada?",
-            FileName = $"{Path.GetFileName(pasta.TrimEnd('\\'))} {DateTime.Now:dd-MM-yyyy}.zip",
-            Filter = "Arquivo compactado (*.zip)|*.zip",
-            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory)
-        };
-        if (dialogo.ShowDialog(this) != true) return;
-        _compactando = true; AtualizarLateral();
-        try
-        {
-            await Arm.CompactarPastaSincronizadaAsync(dialogo.FileName);
-            Ui.MostrarNaPasta(dialogo.FileName);
-        }
-        catch (Exception ex) { Ui.Erro($"Não foi possível criar o .zip. {ex.Message}"); }
-        finally { _compactando = false; AtualizarLateral(); }
-    }
-
     /// <summary>Sincroniza a pasta de modelos; no máximo uma vez a cada poucos segundos ao alternar janelas.</summary>
     public async Task Sincronizar(bool forcar = false)
     {
@@ -410,14 +363,14 @@ public sealed class JanelaPrincipal : Window
     public event Action? SincronizacaoMudou;
 
     /// <summary>
-    /// Importa um dados.json (do Mac, do .zip "Orthck - dados (backup).json" ou de um backup). Os dados atuais vão antes
-    /// para Backups. Se houver a pasta Modelos ao lado do arquivo, as cópias dos modelos vêm junto.
+    /// Importa um dados.json (do Mac ou de outro computador). Os dados atuais vão antes para Backups. Se houver a pasta
+    /// Modelos ao lado do arquivo, as cópias dos modelos vêm junto.
     /// </summary>
     public bool ImportarDados()
     {
         var dialogo = new Microsoft.Win32.OpenFileDialog
         {
-            Title = "Escolha o arquivo de dados do Orthck (dados.json, um backup da pasta Backups ou o “Orthck - dados (backup).json” do .zip)",
+            Title = "Escolha o arquivo de dados do Orthck (dados.json)",
             Filter = "Dados do Orthck (*.json)|*.json|Todos os arquivos|*.*",
             InitialDirectory = Arm.PastaBackups
         };

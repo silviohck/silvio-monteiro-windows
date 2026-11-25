@@ -13,6 +13,17 @@ public sealed partial class Armazenamento
 
     // MARK: Modelos
 
+    /// <summary>
+    /// Modelo que fica escolhido quando o atual não é da subpasta mostrada: o de mesmo nome (troca de local)
+    /// ou, se a subpasta tem um modelo só, esse. Nunca o primeiro de uma lista com vários — fica "Escolha…".
+    /// </summary>
+    public static Guid? ModeloAoTrocarSubpasta(IReadOnlyList<ModeloDocumento> modelosDaSubpasta, Guid? atual, string? nomeAnterior)
+    {
+        if (atual is { } id && modelosDaSubpasta.Any(m => m.Id == id)) return id;
+        var mesmoNome = nomeAnterior == null ? null : modelosDaSubpasta.FirstOrDefault(m => m.Nome == nomeAnterior);
+        return (mesmoNome ?? (modelosDaSubpasta.Count == 1 ? modelosDaSubpasta[0] : null))?.Id;
+    }
+
     public string UrlDoModelo(ModeloDocumento modelo) => Path.Combine(PastaModelos, modelo.Arquivo);
 
     /// <summary>Arquivo original na pasta sincronizada (para editar no Word) ou a cópia guardada pelo app.</summary>
@@ -134,9 +145,20 @@ public sealed partial class Armazenamento
     public LocalAtendimento? LocalDoModelo(ModeloDocumento modelo) => Local(modelo.LocalId);
 
     /// <summary>Modelos que aparecem para um local: os dele e os de todos os locais, por subpasta e nome.</summary>
-    public List<ModeloDocumento> ModelosPara(LocalAtendimento? local) => Dados.Modelos
-        .Where(m => LocalDoModelo(m) is not { } dono || dono.Id == local?.Id)
-        .OrderBy(m => m.Categoria, Texto.Ordem).ThenBy(m => m.Nome, Texto.Ordem).ToList();
+    public List<ModeloDocumento> ModelosPara(LocalAtendimento? local)
+    {
+        // Guardado até a próxima gravação (ou troca dos dados): a tela Gerar pede esta lista várias vezes a cada atualização.
+        var chave = local?.Id ?? Guid.Empty;
+        if (_cacheModelos.TryGetValue(chave, out var c) && ReferenceEquals(c.Dados, Dados) && c.Modelos == Dados.Modelos.Count && c.Locais == Dados.Locais.Count)
+            return [.. c.Lista];
+        var lista = Dados.Modelos
+            .Where(m => LocalDoModelo(m) is not { } dono || dono.Id == local?.Id)
+            .OrderBy(m => m.Categoria, Texto.Ordem).ThenBy(m => m.Nome, Texto.Ordem).ToList();
+        _cacheModelos[chave] = (Dados, Dados.Modelos.Count, Dados.Locais.Count, lista);
+        return [.. lista];
+    }
+
+    private readonly Dictionary<Guid, (DadosApp Dados, int Modelos, int Locais, List<ModeloDocumento> Lista)> _cacheModelos = [];
 
     public void RemoverModelo(ModeloDocumento modelo)
     {

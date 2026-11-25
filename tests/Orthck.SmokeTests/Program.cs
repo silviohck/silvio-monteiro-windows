@@ -110,6 +110,13 @@ try
         && arm.PacientesRecentes("Araruna", null, 12).Count == 0 && arm.PacientesRecentes(null, DateTime.Today.AddDays(-3), 12).Count == 0
         && arm.DocumentosDe(p1).Count == 2 && arm.DiasComAtendimento.SequenceEqual([DateTime.Today]),
         "atendidos recentemente: um por paciente, filtro de local e de dia, documentos do paciente");
+    // Ordem do painel: atendimento mais recente primeiro (não alfabética).
+    var armOrdem = new Armazenamento(Path.Combine(raiz, "ordem-recentes"));
+    var zelia = armOrdem.NovoPaciente("Zélia Teste"); var abel = armOrdem.NovoPaciente("Abel Teste");
+    armOrdem.Registrar(new DocumentoGerado { Modelo = "z", Paciente = abel.Nome, PacienteId = abel.Id, Data = DateTimeOffset.Now.AddMinutes(-2) });
+    armOrdem.Registrar(new DocumentoGerado { Modelo = "z", Paciente = zelia.Nome, PacienteId = zelia.Id, Data = DateTimeOffset.Now.AddMinutes(-1) });
+    var ordem = armOrdem.PacientesRecentes(null, null, 12).Select(r => r.Paciente.Id).ToList();
+    Assert(ordem.IndexOf(zelia.Id) == 0 && ordem.IndexOf(abel.Id) == 1, "atendidos recentemente: o mais recente primeiro");
 
     // Pastas dos documentos
     arm.Dados.PastaDocumentos = Path.Combine(raiz, "Documentos"); arm.Salvar();
@@ -174,8 +181,8 @@ try
     var resumo = imp.ImportarDadosDoMac(Path.Combine(pastaMac, "dados.json"));
     Assert(imp.Dados.Modelos.Single().Copias == 2 && File.Exists(imp.UrlDoModelo(imp.Dados.Modelos[0])) && resumo.Contains("1 paciente"),
         "importa dados e cópias dos modelos do Mac");
-    Assert(imp.Dados.FilaImpressao[0].Situacao == SituacaoImpressao.Incerto && imp.Dados.PastaSincronizada == "" && imp.Dados.Locais[0].Pasta == "",
-        "importação: envio interrompido fica incerto e caminhos do Mac são descartados");
+    Assert(imp.Dados.FilaImpressao.Count == 0 && imp.Dados.PastaSincronizada == "" && imp.Dados.Locais[0].Pasta == "",
+        "importação: a fila continua a deste computador (não vem a do Mac) e caminhos do Mac são descartados");
     Assert(imp.Dados.Historico[0].Data == new DateTimeOffset(2026, 10, 27, 13, 0, 0, TimeSpan.Zero) && imp.Dados.Locais[0].Tipos.Count > 0,
         "datas do Mac e tipos por local");
     Assert(File.ReadAllText(imp.ArquivoDados).Contains("campoFuturo"), "preserva campos desconhecidos do Mac");
@@ -283,10 +290,6 @@ try
     await sync.SincronizarAsync();
     Assert(sync.Dados.Modelos.Count == 2 && sync.Sincronizacao.Erros.Count == 1, "pasta indisponível não remove nenhum modelo");
     Directory.Move(pastaSync + " (desconectada)", pastaSync);
-    var zip = Path.Combine(raiz, "pasta.zip");
-    await sync.CompactarPastaSincronizadaAsync(zip);
-    using (var z = ZipFile.OpenRead(zip))
-        Assert(z.Entries.Any(e => e.FullName.EndsWith("Orthck - dados (backup).json")) && !z.Entries.Any(e => e.Name.StartsWith("~$")), "compactar pasta leva os dados e deixa os temporários");
     // Modelo editado no Word antes da sincronização: na hora de gerar, a cópia é atualizada.
     var originalRx = rx.Origem!.Split('/').Aggregate(pastaSync, Path.Combine);
     Assert(!sync.AtualizarModeloDaPasta(rx), "modelo em dia não é copiado de novo");
@@ -466,6 +469,52 @@ try
     Assert(GoogleDrive.LerCredencial(Path.Combine(raiz, "client_secret.json")) == ("id-de-teste.apps.googleusercontent.com", "segredo-de-teste")
         && !new GoogleDrive(Path.Combine(raiz, "prontuario")).Conectado && !pront.GoogleConectado && !pront.EnvioPendente,
         "Google Drive: credencial do arquivo e nada conectado nem enviado sem autorização");
+
+    // Trocar de subpasta não escolhe sozinho o primeiro modelo (saía "cibex" no lugar do escolhido).
+    {
+        ModeloDocumento M(string nome) => new() { Nome = nome, Arquivo = nome + ".docx", Campos = [] };
+        var cibex = M("cibex"); var pregabalina = M("pregabalina + duloxetina"); var so = M("único");
+        Assert(Armazenamento.ModeloAoTrocarSubpasta([cibex, pregabalina], null, "retorno") == null
+            && Armazenamento.ModeloAoTrocarSubpasta([cibex, pregabalina], pregabalina.Id, null) == pregabalina.Id
+            && Armazenamento.ModeloAoTrocarSubpasta([cibex, pregabalina], Guid.NewGuid(), "pregabalina + duloxetina") == pregabalina.Id
+            && Armazenamento.ModeloAoTrocarSubpasta([so], null, null) == so.Id,
+            "trocar subpasta: com vários modelos fica \"Escolha…\"; mantém o mesmo nome; modelo único já vem escolhido");
+    }
+
+    // Desempenho: sugestões filtram antes de ordenar e usam o mapa guardado (refeito quando os dados mudam).
+    {
+        var sug = new Armazenamento(Path.Combine(raiz, "sugestoes"));
+        var lugar = new LocalAtendimento { Nome = "Lugar Teste" }; sug.Dados.Locais.Add(lugar); sug.Salvar();
+        var bia = sug.NovoPaciente("Bia Souza"); var ana = sug.NovoPaciente("Ana Souza"); sug.NovoPaciente("Carla Lima");
+        Assert(sug.SugestoesDePacientes("souza", null, 8).Select(p => p.Nome).SequenceEqual(["Ana Souza", "Bia Souza"]), "sugestões: filtra e põe em ordem");
+        Assert(sug.SugestoesDePacientes("souza", lugar, 8).Count == 0, "sugestões do local: só quem foi atendido nele");
+        sug.Registrar(new DocumentoGerado { Modelo = "m", Paciente = bia.Nome, PacienteId = bia.Id, Local = "Lugar Teste" });
+        Assert(sug.SugestoesDePacientes("souza", lugar, 8).Single().Id == bia.Id, "sugestões do local: o mapa é refeito depois de um documento novo");
+        Assert(ModelosDeAtendimento.Buscar("gonartrose", []).Count > 0 && ModelosDeAtendimento.Buscar("M17", []).Count > 0, "busca de modelos com textos preparados");
+    }
+
+    // Restaurar uma cópia: a lista mostra as cópias com pacientes e documentos; restaurar volta os dados,
+    // guarda os de agora antes e mantém a fila de impressão deste computador (nada volta para "aguardando").
+    {
+        var rest = new Armazenamento(Path.Combine(raiz, "restaurar"));
+        var antiga = rest.NovoPaciente("Paciente Antigo");
+        rest.Registrar(new DocumentoGerado { Modelo = "m", Paciente = antiga.Nome, PacienteId = antiga.Id });
+        Directory.CreateDirectory(rest.PastaBackups);
+        var copia = Path.Combine(rest.PastaBackups, "dados-2026-11-01.json");
+        File.Copy(rest.ArquivoDados, copia);
+        rest.NovoPaciente("Paciente Novo");
+        var arquivoFila = Path.Combine(raiz, "restaurar-fila.docx"); File.Copy(a, arquivoFila);
+        var docFila = new DocumentoGerado { Modelo = "m", Paciente = "Paciente Novo", Caminho = arquivoFila };
+        rest.Registrar(docFila);
+        rest.AdicionarAFila(docFila, 1);
+        var lista = rest.CopiasDosDados();
+        Assert(lista.Count == 1 && lista[0].Pacientes == 1 && lista[0].Documentos == 1 && !lista[0].AntesDeImportar,
+            "restaurar: lista das cópias com pacientes e documentos");
+        rest.ImportarDados(lista[0].Arquivo, Armazenamento.ModoDeImportacao.Substituir);
+        Assert(rest.Dados.Pacientes.Count == 1 && rest.Dados.Pacientes[0].Nome == "Paciente Antigo" && rest.Dados.FilaImpressao.Count == 1
+            && rest.CopiasDosDados().Count(c => c.AntesDeImportar && c.Pacientes == 2) == 1,
+            "restaurar: volta os dados, guarda os de agora como cópia e mantém a fila deste computador");
+    }
 
     Console.WriteLine(falhas == 0 ? "Todos os testes passaram." : $"{falhas} teste(s) falharam.");
 }

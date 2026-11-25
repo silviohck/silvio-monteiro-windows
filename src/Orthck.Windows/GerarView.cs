@@ -45,10 +45,18 @@ public sealed class GerarView : UserControl
     /// <summary>Nome e campos em maiúsculas, como no Mac ("CAPS LOCK ativo").</summary>
     public static string Maiusculas(string texto) => texto.ToUpper(PtBr);
 
+    private Button? _botaoGerar;
+
     public GerarView(JanelaPrincipal janela)
     {
         _janela = janela;
         Content = _raiz;
+        PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key != Key.Enter || Keyboard.Modifiers != ModifierKeys.Control) return;
+            e.Handled = true;
+            if (_botaoGerar is { IsEnabled: true }) Ui.ExecutarAsync(Gerar);
+        };
         _nome.TextChanged += (_, _) =>
         {
             // Sempre em maiúsculas (digitado, colado ou vindo do cadastro).
@@ -224,9 +232,8 @@ public sealed class GerarView : UserControl
         var modelos = ModelosDaSubpasta;
         if (!modelos.Any(m => m.Id == _modeloId))
         {
-            // Ao trocar de local, fica com o modelo de mesmo nome deste local, se houver.
-            var mesmoNome = Modelo is { } anterior ? modelos.FirstOrDefault(m => m.Nome == anterior.Nome) : null;
-            _modeloId = (mesmoNome ?? modelos.FirstOrDefault())?.Id;
+            // Mesmo nome (troca de local) ou modelo único; com vários, fica "Escolha…" até a escolha.
+            _modeloId = Armazenamento.ModeloAoTrocarSubpasta(modelos, _modeloId, Modelo?.Nome);
             _copias = Modelo?.Copias ?? 1;
         }
     }
@@ -530,11 +537,7 @@ public sealed class GerarView : UserControl
     private List<Paciente> Sugestoes()
     {
         if (NomeDigitado.Length < 2 || Homonimos.Count > 0) return [];
-        var local = Local;
-        return Arm.PacientesOrdenados
-            .Where(p => Texto.Contem(p.Nome, NomeDigitado)
-                && (local == null || Arm.LocaisDoPaciente(p).Any(l => l.Id == local.Id)))
-            .Take(8).ToList();
+        return Arm.SugestoesDePacientes(NomeDigitado, Local, 8);
     }
 
     private void AtualizarSituacaoPaciente()
@@ -696,6 +699,7 @@ public sealed class GerarView : UserControl
 
     private void AtualizarSecaoSalvar()
     {
+        _botaoGerar = null;
         if (Modelo is not { } modelo) { _secaoSalvar.Content = null; return; }
         var corpo = Ui.Coluna(12);
 
@@ -727,13 +731,16 @@ public sealed class GerarView : UserControl
             }
         }
         // O botão lê o modelo escolhido na hora do clique (nunca um modelo guardado de antes).
-        var gerar = Ui.Botao("Gerar documento", () => Ui.ExecutarAsync(Gerar), principal: true, glifo: Ui.GSalvar);
-        gerar.IsDefault = true;
+        // O nome no botão é o do modelo que vai sair; se na hora do clique o modelo for outro, não gera.
+        var esperado = modelo.Id;
+        var gerar = Ui.Botao($"Gerar “{modelo.Nome}”", () => Ui.ExecutarAsync(() => Gerar(esperado)), principal: true, glifo: Ui.GSalvar);
+        // Só Ctrl+Enter gera: Enter sozinho (ao terminar de digitar o nome) gerava sem querer.
+        _botaoGerar = gerar;
         gerar.Padding = new Thickness(18, 9, 18, 9);
         gerar.IsEnabled = !_geracaoConcluida && !PrecisaEscolherPaciente && !(NomeDigitado.Length == 0 && modelo.Campos.Any(CamposAutomaticos.EhNomeDoPaciente));
         gerar.ToolTip = _geracaoConcluida ? "Este documento já foi gerado. Altere os dados, escolha outro modelo ou clique em Próximo paciente."
             : PrecisaEscolherPaciente ? "Escolha qual dos pacientes com este nome é o certo"
-            : NomeDigitado.Length == 0 ? "Digite o nome do paciente" : "Gerar o documento (Enter)";
+            : NomeDigitado.Length == 0 ? "Digite o nome do paciente" : "Gerar o documento (Ctrl+Enter)";
         ToolTipService.SetShowOnDisabled(gerar, true);
         var proximo = BotaoProximo();
         proximo.Padding = new Thickness(16, 9, 16, 9);
@@ -777,9 +784,16 @@ public sealed class GerarView : UserControl
 
     // MARK: Gerar e imprimir
 
-    private async Task Gerar()
+    private async Task Gerar() => await Gerar(null);
+
+    private async Task Gerar(Guid? esperado)
     {
         if (_geracaoConcluida || PrecisaEscolherPaciente) return;
+        if (esperado is { } id && Modelo?.Id != id)
+        {
+            Ui.Erro($"O modelo escolhido mudou para “{Modelo?.Nome}”. Confira o Modelo e clique em Gerar de novo.");
+            return;
+        }
         // Sempre o modelo que está na tela agora, e só se for da subpasta e do local escolhidos.
         if (Modelo is not { } modelo || modelo.Categoria != _subpasta || !Arm.ModelosPara(Local).Any(m => m.Id == modelo.Id))
         {
@@ -908,10 +922,9 @@ public sealed class GerarView : UserControl
         if (_filtroDia != null && !dias.Any(d => d.Item2 == _filtroDia)) _filtroDia = null;
         p.Add(Ui.Escolha(dias, _filtroDia, v => { _filtroDia = v; AtualizarPainel(); }, 160));
 
-        // Os mais recentes entram na lista (até 12; num dia escolhido, todos); na tela, em ordem alfabética.
+        // Os mais recentes (até 12; num dia escolhido, todos), do atendimento mais recente para o mais antigo.
         var recentes = Arm.PacientesRecentes(filtroLocal.Length == 0 ? null : filtroLocal, _filtroDia, _filtroDia == null ? 12 : int.MaxValue,
-                Ajustes.Atual.RecentesLimposEm, Ajustes.Atual.RecentesOcultos)
-            .OrderBy(r => r.Paciente.Nome, Texto.Ordem).ToList();
+                Ajustes.Atual.RecentesLimposEm, Ajustes.Atual.RecentesOcultos);
         if (recentes.Count == 0)
             p.Add(Ui.Texto(filtroLocal.Length == 0 && _filtroDia == null ? "Os pacientes aparecem aqui depois do primeiro documento gerado." : "Nenhum paciente com esse filtro.", Estilo.Apoio));
         foreach (var (paciente, ultimo) in recentes) p.Add(LinhaDoRecente(paciente, ultimo));

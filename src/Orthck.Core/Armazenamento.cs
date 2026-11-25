@@ -138,6 +138,8 @@ public sealed partial class Armazenamento
     /// <summary>Grava agora (gravação atômica: arquivo temporário + troca). Chamado depois de cada alteração.</summary>
     public void Salvar()
     {
+        _cacheModelos.Clear();
+        _cacheLocaisPorPaciente = null;
         FazerBackupDoDia();
         Gravar(Dados, ArquivoDados);
         MarcarEnvioAoDrive();
@@ -194,6 +196,30 @@ public sealed partial class Armazenamento
         catch (UnauthorizedAccessException) { return; }
         foreach (var antigo in Backups().Skip(BackupsGuardados))
             try { File.Delete(antigo); } catch { }
+    }
+
+    /// <summary>Uma cópia dos dados em Backups: a do dia (feita sozinha) ou a feita antes de importar/restaurar.</summary>
+    public sealed record CopiaDosDados(string Arquivo, DateTime Data, bool AntesDeImportar, int Pacientes, int Documentos);
+
+    /// <summary>As cópias guardadas em Backups, da mais nova para a mais antiga (só conta pacientes e documentos).</summary>
+    public IReadOnlyList<CopiaDosDados> CopiasDosDados()
+    {
+        if (!Directory.Exists(PastaBackups)) return [];
+        var lista = new List<CopiaDosDados>();
+        foreach (var arquivo in Directory.GetFiles(PastaBackups, "*.json"))
+        {
+            var nome = Path.GetFileName(arquivo);
+            var antes = nome.StartsWith("antes-de-importar-", StringComparison.Ordinal);
+            if (!antes && !nome.StartsWith("dados-", StringComparison.Ordinal)) continue;
+            try
+            {
+                using var json = JsonDocument.Parse(File.ReadAllBytes(arquivo));
+                int Contar(string chave) => json.RootElement.TryGetProperty(chave, out var v) && v.ValueKind == JsonValueKind.Array ? v.GetArrayLength() : 0;
+                lista.Add(new CopiaDosDados(arquivo, File.GetLastWriteTime(arquivo), antes, Contar("pacientes"), Contar("historico")));
+            }
+            catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException) { }
+        }
+        return lista.OrderByDescending(c => c.Data).ToList();
     }
 
     /// <summary>Backups diários, do mais novo para o mais antigo.</summary>
@@ -266,7 +292,9 @@ public sealed partial class Armazenamento
 
     private string Substituir(string arquivo, DadosApp novos)
     {
-        MarcarEnviosInterrompidos(novos);
+        // A fila de impressão continua a deste computador: a de uma cópia antiga (ou a do Mac) poderia trazer de volta,
+        // como "aguardando", documentos que já foram impressos depois dela.
+        novos.FilaImpressao = Dados.FilaImpressao;
         // Pastas de outro computador (do Mac: /Users/…) podem não existir neste: mantém as daqui.
         if (novos.PastaSincronizada.Length > 0 && (novos.PastaSincronizada.StartsWith('/') || !Directory.Exists(novos.PastaSincronizada)))
             novos.PastaSincronizada = Dados.PastaSincronizada;
@@ -429,6 +457,32 @@ public sealed partial class Armazenamento
             if (lid != Guid.Empty) De(pid).Add(lid);
         }
         return mapa;
+    }
+
+    private (DadosApp Dados, int Pacientes, int Historico, int Locais, Dictionary<Guid, HashSet<Guid>> Mapa)? _cacheLocaisPorPaciente;
+
+    /// <summary>
+    /// O mesmo que <see cref="LocaisPorPaciente"/>, guardado até os dados mudarem (para as sugestões a cada letra digitada
+    /// no nome não percorrerem o histórico inteiro de novo).
+    /// </summary>
+    public Dictionary<Guid, HashSet<Guid>> LocaisPorPacienteGuardado()
+    {
+        if (_cacheLocaisPorPaciente is { } c && ReferenceEquals(c.Dados, Dados) && c.Pacientes == Dados.Pacientes.Count
+            && c.Historico == Dados.Historico.Count && c.Locais == Dados.Locais.Count) return c.Mapa;
+        var mapa = LocaisPorPaciente();
+        _cacheLocaisPorPaciente = (Dados, Dados.Pacientes.Count, Dados.Historico.Count, Dados.Locais.Count, mapa);
+        return mapa;
+    }
+
+    /// <summary>Pacientes com o trecho digitado, só do local escolhido (cadastrados nele ou já atendidos nele); sem local,
+    /// todos. Filtra antes de pôr em ordem alfabética.</summary>
+    public List<Paciente> SugestoesDePacientes(string trecho, LocalAtendimento? local, int limite)
+    {
+        var mapa = local == null ? null : LocaisPorPacienteGuardado();
+        return Dados.Pacientes
+            .Where(p => Texto.Contem(p.Nome, trecho) && (local == null || (mapa!.TryGetValue(p.Id, out var ids) && ids.Contains(local.Id))))
+            .OrderBy(p => p.Nome, Texto.Ordem)
+            .Take(limite).ToList();
     }
 
     /// <summary>"Alagoa Grande" ou "Alagoa Grande, Araruna".</summary>

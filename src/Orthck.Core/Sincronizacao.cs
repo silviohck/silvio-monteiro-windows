@@ -1,4 +1,3 @@
-using System.IO.Compression;
 using System.Text.RegularExpressions;
 
 namespace Orthck.Core;
@@ -315,43 +314,6 @@ public sealed partial class Armazenamento
         return pasta;
     }
 
-    /// <summary>
-    /// Compacta a pasta sincronizada num .zip (sem os temporários do Word "~$…"), junto com uma cópia dos dados
-    /// ("Orthck - dados (backup).json"). A pasta original não é alterada.
-    /// </summary>
-    public async Task CompactarPastaSincronizadaAsync(string destinoZip)
-    {
-        var pasta = Dados.PastaSincronizada;
-        if (pasta.Length == 0 || !Directory.Exists(pasta)) throw new DirectoryNotFoundException("A pasta sincronizada não foi encontrada.");
-        var dados = ArquivoDados;
-        await Task.Run(() =>
-        {
-            var temporaria = Path.Combine(Path.GetTempPath(), "orthck-zip-" + Guid.NewGuid().ToString("N"));
-            var copia = Path.Combine(temporaria, Path.GetFileName(pasta.TrimEnd('\\', '/')));
-            try
-            {
-                CopiarPasta(pasta, copia);
-                if (File.Exists(dados)) File.Copy(dados, Path.Combine(copia, "Orthck - dados (backup).json"));
-                if (File.Exists(destinoZip)) File.Delete(destinoZip);
-                ZipFile.CreateFromDirectory(temporaria, destinoZip, CompressionLevel.Optimal, includeBaseDirectory: false);
-            }
-            finally { try { Directory.Delete(temporaria, true); } catch { } }
-        });
-    }
-
-    private static void CopiarPasta(string origem, string destino)
-    {
-        Directory.CreateDirectory(destino);
-        foreach (var arquivo in Directory.EnumerateFiles(origem))
-        {
-            var nome = Path.GetFileName(arquivo);
-            if (nome.StartsWith("~$") || nome.Equals("desktop.ini", StringComparison.OrdinalIgnoreCase) || nome.Equals("Thumbs.db", StringComparison.OrdinalIgnoreCase)) continue;
-            using var entrada = new FileStream(arquivo, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            using var saida = File.Create(Path.Combine(destino, nome));
-            entrada.CopyTo(saida);
-        }
-        foreach (var sub in Directory.EnumerateDirectories(origem)) CopiarPasta(sub, Path.Combine(destino, Path.GetFileName(sub)));
-    }
 }
 
 /// <summary>O que uma subpasta da pasta sincronizada representa.</summary>

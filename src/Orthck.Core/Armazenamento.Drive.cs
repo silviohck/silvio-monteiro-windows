@@ -12,7 +12,6 @@ namespace Orthck.Core;
 public sealed partial class Armazenamento
 {
     public const string NomeDoArquivoNuvem = "Orthck - dados.json";
-    public const string NomeDoZipNoDrive = "Orthck - modelos (backup).zip";
     /// <summary>Ao voltar para o app, o Drive é consultado no máximo uma vez a cada 30 segundos.</summary>
     private static readonly TimeSpan IntervaloMinimoAoVoltar = TimeSpan.FromSeconds(30);
 
@@ -28,7 +27,6 @@ public sealed partial class Armazenamento
     public bool SincronizandoDrive { get; private set; }
     /// <summary>Há mudanças esperando o próximo envio ao Drive.</summary>
     public bool EnvioPendente { get; private set; }
-    public bool EnviandoPastaAoDrive { get; private set; }
     private bool _outraSincronizacaoPedida;
     private DateTime _ultimaConsultaAoVoltar = DateTime.MinValue;
 
@@ -162,29 +160,5 @@ public sealed partial class Armazenamento
         Drive.Desconectar();
         SituacaoNuvem = "";
         DriveMudou?.Invoke();
-    }
-
-    /// <summary>Envio da pasta sincronizada ao Google Drive: um .zip com a pasta inteira e o backup dos dados, sempre no
-    /// mesmo arquivo do Drive (substituído a cada envio). Devolve o tamanho enviado, para o aviso.</summary>
-    public async Task<long> EnviarPastaAoGoogleDriveAsync()
-    {
-        if (Dados.PastaSincronizada.Length == 0) throw new InvalidOperationException("Escolha antes a pasta sincronizada (aba Modelos).");
-        if (!Drive.Conectado) throw ErroGoogle.SemAutorizacao;
-        EnviandoPastaAoDrive = true;
-        DriveMudou?.Invoke();
-        var zip = Path.Combine(Path.GetTempPath(), $"orthck-{Guid.NewGuid():N}.zip");
-        try
-        {
-            await CompactarPastaSincronizadaAsync(zip);
-            var existente = await Drive.ProcurarArquivoAsync(NomeDoZipNoDrive);
-            await Drive.EnviarArquivoGrandeAsync(zip, NomeDoZipNoDrive, "application/zip", existente?.Id);
-            return new FileInfo(zip).Length;
-        }
-        finally
-        {
-            try { File.Delete(zip); } catch { }
-            EnviandoPastaAoDrive = false;
-            DriveMudou?.Invoke();
-        }
     }
 }

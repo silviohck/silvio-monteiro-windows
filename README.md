@@ -59,7 +59,7 @@ Aba **Prontuário**: escolha o local e a ficha (já vêm a *Avaliação ortopéd
 
 ## Backup e Google Drive
 
-Na barra lateral, em **Backup**: *Compactar (.zip)…*, *Importar dados (.json)…* (**Juntar** ou **Substituir**), *Enviar pasta ao Google Drive* e *Conectar ao Google Drive…*. Conectado, o app guarda “Orthck - dados.json” no Drive e junta o que mudou em outro computador (Mac ou Windows) com a mesma conta. Nada vai para o Drive sem conectar. A credencial do Google entra no app pelos Secrets `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET` do repositório (os mesmos do Mac); sem eles, a janela pede o arquivo `client_secret….json`.
+Na barra lateral, em **Backup**: *Restaurar uma cópia…* (a lista das cópias diárias dos dados, com data, pacientes e documentos; restaurar pede confirmação, guarda antes os dados de agora e não traz a fila de impressão da cópia; *Usar outro arquivo…* junta ou substitui com um dados.json de outro computador) e *Conectar ao Google Drive…*. Conectado, o app guarda “Orthck - dados.json” no Drive e junta o que mudou em outro computador (Mac ou Windows) com a mesma conta. Nada vai para o Drive sem conectar. A credencial do Google entra no app pelos Secrets `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET` do repositório (os mesmos do Mac); sem eles, a janela pede o arquivo `client_secret….json`.
 
 ## Tabelas CID-10 / SIGTAP
 

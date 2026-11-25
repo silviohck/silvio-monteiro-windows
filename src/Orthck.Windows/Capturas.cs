@@ -143,6 +143,7 @@ public static class Capturas
         await Dialogo(() => new AjustesJanela(janela), "17-ajustes");
         await Dialogo(() => new ConectarGoogleJanela(arm), "22-conectar-google-drive");
         await Dialogo(() => new ImportarDadosJanela("dados.json"), "23-importar-dados");
+        await Dialogo(() => new RestaurarCopiaJanela(janela), "24-restaurar-copia");
 
         // Prontuário: ficha de Araruna com um modelo de atendimento aplicado e a de Alagoa Grande (texto livre).
         var ararunaDemo = arm.Dados.Locais.First(l => l.Nome == "ARARUNA");
